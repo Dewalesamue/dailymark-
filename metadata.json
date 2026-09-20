@@ -1,0 +1,6 @@
+{
+  "name": "Daymark",
+  "description": "Keep a mark of every day.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
