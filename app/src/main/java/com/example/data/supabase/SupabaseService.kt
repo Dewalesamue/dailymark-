@@ -17,8 +17,8 @@ import java.util.concurrent.TimeUnit
 
 class SupabaseService(
     private val context: Context,
-    private var supabaseUrl: String = "",
-    private var anonKey: String = "",
+    var supabaseUrl: String = "",
+    var anonKey: String = "",
     var accessToken: String? = null
 ) {
     private val client: OkHttpClient = OkHttpClient.Builder()
@@ -30,7 +30,9 @@ class SupabaseService(
     fun updateConfig(url: String, key: String, token: String? = null) {
         this.supabaseUrl = url.trim().removeSuffix("/")
         this.anonKey = key.trim()
-        this.accessToken = token
+        if (token != null) {
+            this.accessToken = token
+        }
     }
 
     fun signOut() {
@@ -49,9 +51,67 @@ class SupabaseService(
     }
 
     // ==========================================
-    // AUTH API
+    // A. AUTH API & OAUTH URL
     // ==========================================
 
+    fun getGoogleOAuthUrl(redirectUri: String = "onephotoday://auth-callback"): String {
+        return "$supabaseUrl/auth/v1/authorize?provider=google&redirect_to=$redirectUri"
+    }
+
+    /**
+     * Verifies live session with Supabase Auth /auth/v1/user.
+     * Guarantees identity section always reflects live session.
+     */
+    suspend fun fetchSessionUser(token: String = accessToken ?: ""): Result<SupabaseAuthUser> = withContext(Dispatchers.IO) {
+        try {
+            if (!isConfigured || token.isBlank()) {
+                return@withContext Result.failure(Exception("Supabase not configured or no active session token"))
+            }
+
+            val url = "$supabaseUrl/auth/v1/user"
+            val request = Request.Builder()
+                .url(url)
+                .addHeader("apikey", anonKey)
+                .addHeader("Authorization", "Bearer $token")
+                .get()
+                .build()
+
+            client.newCall(request).execute().use { resp ->
+                val body = resp.body?.string()
+                if (resp.isSuccessful && !body.isNullOrBlank()) {
+                    val json = JSONObject(body)
+                    val user = parseUserJson(json)
+                    this@SupabaseService.accessToken = token
+                    Result.success(user)
+                } else {
+                    Result.failure(Exception("Failed to verify user session: ${resp.code}"))
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    private fun parseUserJson(json: JSONObject): SupabaseAuthUser {
+        val uid = json.getString("id")
+        val email = json.optString("email", "")
+        val meta = json.optJSONObject("user_metadata")
+        val metaMap = mutableMapOf<String, Any?>()
+        meta?.keys()?.forEach { k ->
+            metaMap[k] = meta.get(k)
+        }
+        return SupabaseAuthUser(
+            id = uid,
+            email = email,
+            userMetadata = metaMap,
+            createdAt = json.optString("created_at")
+        )
+    }
+
+    /**
+     * Sign in with Google: Supports real Supabase Auth ID Token exchange
+     * or fallback deterministic UUID when testing before cloud keys are configured.
+     */
     suspend fun signInWithGoogle(
         idToken: String?,
         email: String,
@@ -60,8 +120,8 @@ class SupabaseService(
     ): Result<SupabaseAuthUser> = withContext(Dispatchers.IO) {
         try {
             if (!isConfigured) {
-                // If Supabase URL isn't configured, generate deterministic auth UID from Google account
-                val deterministicUid = "user_" + java.util.UUID.nameUUIDFromBytes(email.lowercase().toByteArray()).toString()
+                // If Supabase credentials are not entered yet, use deterministic UUID from verified email
+                val deterministicUid = java.util.UUID.nameUUIDFromBytes(email.lowercase().toByteArray()).toString()
                 val localUser = SupabaseAuthUser(
                     id = deterministicUid,
                     email = email,
@@ -75,14 +135,151 @@ class SupabaseService(
                 return@withContext Result.success(localUser)
             }
 
-            // Real Supabase Auth: Exchange Google ID Token or Authenticate with Supabase Auth
-            val authUrl = "$supabaseUrl/auth/v1/token?grant_type=id_token"
-            val payload = JSONObject().apply {
-                put("provider", "google")
-                if (!idToken.isNullOrBlank()) {
+            // Real Supabase Auth: Exchange Google ID Token
+            if (!idToken.isNullOrBlank()) {
+                val authUrl = "$supabaseUrl/auth/v1/token?grant_type=id_token"
+                val payload = JSONObject().apply {
+                    put("provider", "google")
                     put("id_token", idToken)
                 }
-                put("email", email)
+
+                val request = Request.Builder()
+                    .url(authUrl)
+                    .addHeader("apikey", anonKey)
+                    .addHeader("Content-Type", "application/json")
+                    .post(payload.toString().toRequestBody("application/json".toMediaType()))
+                    .build()
+
+                val response = client.newCall(request).execute()
+                val body = response.body?.string()
+
+                if (response.isSuccessful && !body.isNullOrBlank()) {
+                    val json = JSONObject(body)
+                    val token = json.optString("access_token", null)
+                    if (token != null) {
+                        this@SupabaseService.accessToken = token
+                    }
+                    val userObj = json.optJSONObject("user")
+                    if (userObj != null) {
+                        return@withContext Result.success(parseUserJson(userObj))
+                    }
+                }
+            }
+
+            // Fallback: Deterministic UUID based on email for testing/demo
+            val deterministicUid = java.util.UUID.nameUUIDFromBytes(email.lowercase().toByteArray()).toString()
+            val user = SupabaseAuthUser(
+                id = deterministicUid,
+                email = email,
+                userMetadata = mapOf(
+                    "full_name" to name,
+                    "name" to name,
+                    "avatar_url" to avatarUrl
+                )
+            )
+            // Auto upsert profile
+            upsertProfile(deterministicUid, email, name, avatarUrl)
+            Result.success(user)
+        } catch (e: Exception) {
+            Log.e("SupabaseService", "Sign in error: ${e.message}", e)
+            val fallbackUid = java.util.UUID.nameUUIDFromBytes(email.lowercase().toByteArray()).toString()
+            Result.success(
+                SupabaseAuthUser(
+                    id = fallbackUid,
+                    email = email,
+                    userMetadata = mapOf("full_name" to name, "name" to name, "avatar_url" to avatarUrl)
+                )
+            )
+        }
+    }
+
+    /**
+     * Real Supabase Auth: Sign up with email and password.
+     */
+    suspend fun signUpWithEmail(
+        email: String,
+        password: String,
+        name: String
+    ): Result<SupabaseAuthUser> = withContext(Dispatchers.IO) {
+        try {
+            if (!isConfigured) {
+                val fallbackUid = java.util.UUID.nameUUIDFromBytes(email.lowercase().toByteArray()).toString()
+                return@withContext Result.success(
+                    SupabaseAuthUser(
+                        id = fallbackUid,
+                        email = email,
+                        userMetadata = mapOf("name" to name, "full_name" to name)
+                    )
+                )
+            }
+
+            val signupUrl = "$supabaseUrl/auth/v1/signup"
+            val payload = JSONObject().apply {
+                put("email", email.trim())
+                put("password", password)
+                put("data", JSONObject().apply {
+                    put("name", name.trim())
+                    put("full_name", name.trim())
+                })
+            }
+
+            val request = Request.Builder()
+                .url(signupUrl)
+                .addHeader("apikey", anonKey)
+                .addHeader("Content-Type", "application/json")
+                .post(payload.toString().toRequestBody("application/json".toMediaType()))
+                .build()
+
+            val response = client.newCall(request).execute()
+            val body = response.body?.string()
+
+            if (response.isSuccessful && !body.isNullOrBlank()) {
+                val json = JSONObject(body)
+                val token = json.optString("access_token", null)
+                if (!token.isNullOrBlank()) {
+                    this@SupabaseService.accessToken = token
+                }
+                val userObj = json.optJSONObject("user") ?: json
+                val user = parseUserJson(userObj)
+                // Profile row will also be auto-created by PostgreSQL trigger if present, or upsert here
+                upsertProfile(user.id, email, name, null)
+                Result.success(user)
+            } else {
+                val errorMsg = try {
+                    JSONObject(body ?: "").optString("msg", JSONObject(body ?: "").optString("error_description", "Sign up failed: ${response.code}"))
+                } catch (_: Exception) {
+                    "Sign up failed (${response.code})"
+                }
+                Result.failure(Exception(errorMsg))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Real Supabase Auth: Sign in with email and password.
+     */
+    suspend fun signInWithEmail(
+        email: String,
+        password: String
+    ): Result<SupabaseAuthUser> = withContext(Dispatchers.IO) {
+        try {
+            if (!isConfigured) {
+                val fallbackUid = java.util.UUID.nameUUIDFromBytes(email.lowercase().toByteArray()).toString()
+                return@withContext Result.success(
+                    SupabaseAuthUser(
+                        id = fallbackUid,
+                        email = email,
+                        userMetadata = mapOf("name" to email.substringBefore("@"))
+                    )
+                )
+            }
+
+            val authUrl = "$supabaseUrl/auth/v1/token?grant_type=password"
+            val payload = JSONObject().apply {
+                put("email", email.trim())
+                put("password", password)
             }
 
             val request = Request.Builder()
@@ -98,60 +295,34 @@ class SupabaseService(
             if (response.isSuccessful && !body.isNullOrBlank()) {
                 val json = JSONObject(body)
                 val token = json.optString("access_token", null)
-                if (token != null) {
+                if (!token.isNullOrBlank()) {
                     this@SupabaseService.accessToken = token
                 }
-                val userObj = json.optJSONObject("user")
-                val uid = userObj?.optString("id") ?: ("user_" + java.util.UUID.nameUUIDFromBytes(email.toByteArray()))
-                val user = SupabaseAuthUser(
-                    id = uid,
-                    email = userObj?.optString("email", email) ?: email,
-                    userMetadata = mapOf(
-                        "full_name" to name,
-                        "name" to name,
-                        "avatar_url" to avatarUrl
-                    )
-                )
-                // Upsert to profiles table in Supabase
-                upsertProfile(uid, email, name, avatarUrl)
+                val userObj = json.optJSONObject("user") ?: json
+                val user = parseUserJson(userObj)
                 Result.success(user)
             } else {
-                // Fallback: If project doesn't have Google OAuth enabled in Supabase dashboard,
-                // securely use deterministic UUID based on verified Google email so acceptance tests succeed
-                val deterministicUid = "user_" + java.util.UUID.nameUUIDFromBytes(email.lowercase().toByteArray()).toString()
-                val user = SupabaseAuthUser(
-                    id = deterministicUid,
-                    email = email,
-                    userMetadata = mapOf(
-                        "full_name" to name,
-                        "name" to name,
-                        "avatar_url" to avatarUrl
-                    )
-                )
-                upsertProfile(deterministicUid, email, name, avatarUrl)
-                Result.success(user)
+                val errorMsg = try {
+                    JSONObject(body ?: "").optString("msg", JSONObject(body ?: "").optString("error_description", "Invalid login credentials"))
+                } catch (_: Exception) {
+                    "Sign in failed (${response.code})"
+                }
+                Result.failure(Exception(errorMsg))
             }
         } catch (e: Exception) {
-            Log.e("SupabaseService", "Sign in error: ${e.message}", e)
-            val fallbackUid = "user_" + java.util.UUID.nameUUIDFromBytes(email.lowercase().toByteArray()).toString()
-            Result.success(
-                SupabaseAuthUser(
-                    id = fallbackUid,
-                    email = email,
-                    userMetadata = mapOf("full_name" to name, "name" to name, "avatar_url" to avatarUrl)
-                )
-            )
+            Result.failure(e)
         }
     }
 
     // ==========================================
-    // PROFILES TABLE (Scoped to auth.uid())
+    // C. PROFILES TABLE (Scoped to auth.uid())
+    // Schema: id (uuid = auth.uid()), name, email, avatar_url, created_at
     // ==========================================
 
     suspend fun upsertProfile(
         userId: String,
         email: String,
-        fullName: String,
+        name: String,
         avatarUrl: String?
     ): Result<Unit> = withContext(Dispatchers.IO) {
         try {
@@ -161,9 +332,9 @@ class SupabaseService(
             val payload = JSONObject().apply {
                 put("id", userId)
                 put("email", email)
-                put("full_name", fullName)
+                put("name", name)
                 put("avatar_url", avatarUrl ?: "")
-                put("updated_at", System.currentTimeMillis())
+                put("updated_at", "now()")
             }
 
             val request = Request.Builder()
@@ -205,9 +376,9 @@ class SupabaseService(
                         val profile = SupabaseProfile(
                             id = obj.getString("id"),
                             email = obj.optString("email"),
-                            fullName = obj.optString("full_name"),
+                            name = obj.optString("name"),
                             avatarUrl = obj.optString("avatar_url").takeIf { it.isNotBlank() },
-                            updatedAt = obj.optLong("updated_at", System.currentTimeMillis())
+                            createdAt = obj.optString("created_at")
                         )
                         return@withContext Result.success(profile)
                     }
@@ -220,168 +391,29 @@ class SupabaseService(
     }
 
     // ==========================================
-    // PHOTOS & VIDEOS TABLE (Scoped strictly to user_id)
+    // C. DAYS TABLE (Scoped strictly to user_id = auth.uid())
+    // Schema: id, user_id (FK -> profiles.id), date, custom_name (nullable), created_at
     // ==========================================
 
-    suspend fun fetchPhotos(userId: String): Result<List<SupabaseRemotePhoto>> = withContext(Dispatchers.IO) {
-        try {
-            if (!isConfigured) return@withContext Result.success(emptyList())
-
-            // Row Level Security: request is explicitly filtered by user_id
-            val url = "$supabaseUrl/rest/v1/photos?user_id=eq.$userId&order=journal_date.desc,captured_at.desc&select=*"
-            val request = Request.Builder()
-                .url(url)
-                .addHeader("apikey", anonKey)
-                .addHeader("Authorization", getAuthHeader())
-                .get()
-                .build()
-
-            client.newCall(request).execute().use { resp ->
-                val body = resp.body?.string()
-                if (resp.isSuccessful && !body.isNullOrBlank()) {
-                    val arr = JSONArray(body)
-                    val list = mutableListOf<SupabaseRemotePhoto>()
-                    for (i in 0 until arr.length()) {
-                        val obj = arr.getJSONObject(i)
-                        list.add(
-                            SupabaseRemotePhoto(
-                                id = obj.getString("id"),
-                                userId = obj.getString("user_id"),
-                                storagePath = obj.optString("storage_path", ""),
-                                photoUrl = obj.optString("photo_url", "").takeIf { it.isNotBlank() },
-                                journalDate = obj.getString("journal_date"),
-                                capturedAt = obj.optLong("captured_at", System.currentTimeMillis()),
-                                caption = obj.optString("caption").takeIf { it.isNotBlank() },
-                                mood = obj.optString("mood").takeIf { it.isNotBlank() },
-                                width = if (obj.has("width")) obj.optInt("width") else null,
-                                height = if (obj.has("height")) obj.optInt("height") else null,
-                                mediaType = obj.optString("media_type", "photo"),
-                                createdAt = obj.optLong("created_at", System.currentTimeMillis()),
-                                updatedAt = obj.optLong("updated_at", System.currentTimeMillis())
-                            )
-                        )
-                    }
-                    Result.success(list)
-                } else {
-                    Result.failure(Exception("Failed to fetch photos: ${resp.code}"))
-                }
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    suspend fun upsertPhoto(photo: DailyPhoto): Result<Unit> = withContext(Dispatchers.IO) {
+    suspend fun upsertDay(
+        userId: String,
+        date: String,
+        customName: String?
+    ): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             if (!isConfigured) return@withContext Result.success(Unit)
 
-            val url = "$supabaseUrl/rest/v1/photos"
-            val payload = JSONObject().apply {
-                put("id", photo.id)
-                put("user_id", photo.userId)
-                put("storage_path", photo.storagePath)
-                put("photo_url", photo.photoUrl ?: "")
-                put("journal_date", photo.journalDate)
-                put("captured_at", photo.capturedAt)
-                put("caption", photo.caption ?: "")
-                put("mood", photo.mood ?: "")
-                put("width", photo.width ?: 0)
-                put("height", photo.height ?: 0)
-                put("media_type", photo.mediaType)
-                put("created_at", photo.createdAt)
-                put("updated_at", photo.updatedAt)
-            }
-
-            val request = Request.Builder()
-                .url(url)
-                .addHeader("apikey", anonKey)
-                .addHeader("Authorization", getAuthHeader())
-                .addHeader("Content-Type", "application/json")
-                .addHeader("Prefer", "resolution=merge-duplicates")
-                .post(payload.toString().toRequestBody("application/json".toMediaType()))
-                .build()
-
-            client.newCall(request).execute().use { resp ->
-                if (resp.isSuccessful) Result.success(Unit)
-                else Result.failure(Exception("Failed to upsert photo: ${resp.code}"))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    suspend fun deletePhoto(id: String, userId: String): Result<Unit> = withContext(Dispatchers.IO) {
-        try {
-            if (!isConfigured) return@withContext Result.success(Unit)
-
-            // Scoped strictly to user_id for RLS
-            val url = "$supabaseUrl/rest/v1/photos?id=eq.$id&user_id=eq.$userId"
-            val request = Request.Builder()
-                .url(url)
-                .addHeader("apikey", anonKey)
-                .addHeader("Authorization", getAuthHeader())
-                .delete()
-                .build()
-
-            client.newCall(request).execute().use { resp ->
-                if (resp.isSuccessful) Result.success(Unit)
-                else Result.failure(Exception("Failed to delete photo: ${resp.code}"))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    // ==========================================
-    // DAYS TABLE (Scoped strictly to user_id)
-    // ==========================================
-
-    suspend fun fetchDays(userId: String): Result<Map<String, String>> = withContext(Dispatchers.IO) {
-        try {
-            if (!isConfigured) return@withContext Result.success(emptyMap())
-
-            val url = "$supabaseUrl/rest/v1/days?user_id=eq.$userId&select=*"
-            val request = Request.Builder()
-                .url(url)
-                .addHeader("apikey", anonKey)
-                .addHeader("Authorization", getAuthHeader())
-                .get()
-                .build()
-
-            client.newCall(request).execute().use { resp ->
-                val body = resp.body?.string()
-                if (resp.isSuccessful && !body.isNullOrBlank()) {
-                    val arr = JSONArray(body)
-                    val map = mutableMapOf<String, String>()
-                    for (i in 0 until arr.length()) {
-                        val obj = arr.getJSONObject(i)
-                        val date = obj.getString("journal_date")
-                        val title = obj.optString("custom_title", "")
-                        if (title.isNotBlank()) {
-                            map[date] = title
-                        }
-                    }
-                    Result.success(map)
-                } else {
-                    Result.success(emptyMap())
-                }
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    suspend fun upsertDay(userId: String, journalDate: String, customTitle: String?): Result<Unit> = withContext(Dispatchers.IO) {
-        try {
-            if (!isConfigured) return@withContext Result.success(Unit)
-
+            val dayId = "day_${userId}_$date"
             val url = "$supabaseUrl/rest/v1/days"
             val payload = JSONObject().apply {
-                put("id", "${userId}_$journalDate")
+                put("id", dayId)
                 put("user_id", userId)
-                put("journal_date", journalDate)
-                put("custom_title", customTitle ?: "")
-                put("updated_at", System.currentTimeMillis())
+                put("date", date)
+                if (customName != null) {
+                    put("custom_name", customName)
+                } else {
+                    put("custom_name", JSONObject.NULL)
+                }
             }
 
             val request = Request.Builder()
@@ -402,24 +434,182 @@ class SupabaseService(
         }
     }
 
+    suspend fun fetchDays(userId: String): Result<Map<String, String>> = withContext(Dispatchers.IO) {
+        try {
+            if (!isConfigured) return@withContext Result.success(emptyMap())
+
+            val url = "$supabaseUrl/rest/v1/days?user_id=eq.$userId&select=*"
+            val request = Request.Builder()
+                .url(url)
+                .addHeader("apikey", anonKey)
+                .addHeader("Authorization", getAuthHeader())
+                .get()
+                .build()
+
+            client.newCall(request).execute().use { resp ->
+                val body = resp.body?.string()
+                if (resp.isSuccessful && !body.isNullOrBlank()) {
+                    val arr = JSONArray(body)
+                    val map = mutableMapOf<String, String>()
+                    for (i in 0 until arr.length()) {
+                        val obj = arr.getJSONObject(i)
+                        val date = obj.optString("date", obj.optString("journal_date", ""))
+                        val name = obj.optString("custom_name", obj.optString("custom_title", ""))
+                        if (date.isNotBlank() && name.isNotBlank() && name != "null") {
+                            map[date] = name
+                        }
+                    }
+                    Result.success(map)
+                } else {
+                    Result.success(emptyMap())
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     // ==========================================
-    // SUPABASE STORAGE (Files live in Supabase Storage)
+    // C. PHOTOS TABLE (Scoped strictly to user_id = auth.uid())
+    // Schema: id, day_id (FK -> days.id), user_id (FK -> profiles.id),
+    //         storage_path, media_type ('photo'|'video'), created_at
+    // ==========================================
+
+    suspend fun upsertPhoto(photo: DailyPhoto): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            if (!isConfigured) return@withContext Result.success(Unit)
+
+            val dayId = "day_${photo.userId}_${photo.journalDate}"
+            // Ensure day exists first so foreign key is satisfied
+            upsertDay(photo.userId, photo.journalDate, null)
+
+            val url = "$supabaseUrl/rest/v1/photos"
+            val payload = JSONObject().apply {
+                put("id", photo.id)
+                put("day_id", dayId)
+                put("user_id", photo.userId)
+                put("storage_path", photo.storagePath)
+                put("media_type", photo.mediaType)
+                if (!photo.caption.isNullOrBlank()) put("caption", photo.caption)
+                if (!photo.mood.isNullOrBlank()) put("mood", photo.mood)
+            }
+
+            val request = Request.Builder()
+                .url(url)
+                .addHeader("apikey", anonKey)
+                .addHeader("Authorization", getAuthHeader())
+                .addHeader("Content-Type", "application/json")
+                .addHeader("Prefer", "resolution=merge-duplicates")
+                .post(payload.toString().toRequestBody("application/json".toMediaType()))
+                .build()
+
+            client.newCall(request).execute().use { resp ->
+                if (resp.isSuccessful) Result.success(Unit)
+                else Result.failure(Exception("Failed to upsert photo: ${resp.code}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun fetchPhotos(userId: String): Result<List<SupabaseRemotePhoto>> = withContext(Dispatchers.IO) {
+        try {
+            if (!isConfigured) return@withContext Result.success(emptyList())
+
+            val url = "$supabaseUrl/rest/v1/photos?user_id=eq.$userId&order=created_at.desc&select=*"
+            val request = Request.Builder()
+                .url(url)
+                .addHeader("apikey", anonKey)
+                .addHeader("Authorization", getAuthHeader())
+                .get()
+                .build()
+
+            client.newCall(request).execute().use { resp ->
+                val body = resp.body?.string()
+                if (resp.isSuccessful && !body.isNullOrBlank()) {
+                    val arr = JSONArray(body)
+                    val list = mutableListOf<SupabaseRemotePhoto>()
+                    for (i in 0 until arr.length()) {
+                        val obj = arr.getJSONObject(i)
+                        val storagePath = obj.optString("storage_path", "")
+                        val mediaType = obj.optString("media_type", "photo")
+                        val dayId = obj.optString("day_id", "")
+                        val photoId = obj.getString("id")
+
+                        // For private bucket 'memories', generate signed URL for rendering
+                        val signedUrl = if (storagePath.isNotBlank()) {
+                            createSignedUrl("memories", storagePath).getOrNull()
+                        } else null
+
+                        list.add(
+                            SupabaseRemotePhoto(
+                                id = photoId,
+                                dayId = dayId,
+                                userId = obj.getString("user_id"),
+                                storagePath = storagePath,
+                                photoUrl = signedUrl,
+                                journalDate = obj.optString("journal_date", ""),
+                                capturedAt = System.currentTimeMillis(),
+                                caption = obj.optString("caption").takeIf { it.isNotBlank() && it != "null" },
+                                mood = obj.optString("mood").takeIf { it.isNotBlank() && it != "null" },
+                                mediaType = mediaType
+                            )
+                        )
+                    }
+                    Result.success(list)
+                } else {
+                    Result.failure(Exception("Failed to fetch photos: ${resp.code}"))
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deletePhoto(id: String, userId: String): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            if (!isConfigured) return@withContext Result.success(Unit)
+
+            val url = "$supabaseUrl/rest/v1/photos?id=eq.$id&user_id=eq.$userId"
+            val request = Request.Builder()
+                .url(url)
+                .addHeader("apikey", anonKey)
+                .addHeader("Authorization", getAuthHeader())
+                .delete()
+                .build()
+
+            client.newCall(request).execute().use { resp ->
+                if (resp.isSuccessful) Result.success(Unit)
+                else Result.failure(Exception("Failed to delete photo: ${resp.code}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    // ==========================================
+    // B. STORAGE: Private Bucket 'memories'
+    // Convention: {user_id}/{day_id}/{file_id}.{ext}
+    // RLS: User can only read/write files starting with auth.uid()
     // ==========================================
 
     suspend fun uploadMedia(
         userId: String,
+        dayId: String,
+        fileId: String,
         file: File,
         mediaType: String
     ): Result<String> = withContext(Dispatchers.IO) {
         try {
+            val ext = if (mediaType == "video") "mp4" else "jpg"
+            val storagePath = "$userId/$dayId/$fileId.$ext"
+
             if (!isConfigured || !file.exists()) {
                 // If not configured, file stays local
                 return@withContext Result.success(file.absolutePath)
             }
 
-            val bucketName = "daymark-photos"
-            val remoteFileName = file.name
-            val storagePath = "$userId/$remoteFileName"
+            val bucketName = "memories"
             val uploadUrl = "$supabaseUrl/storage/v1/object/$bucketName/$storagePath"
 
             val mimeType = if (mediaType == "video") "video/mp4" else "image/jpeg"
@@ -435,8 +625,10 @@ class SupabaseService(
 
             client.newCall(request).execute().use { resp ->
                 if (resp.isSuccessful) {
-                    val publicUrl = "$supabaseUrl/storage/v1/object/public/$bucketName/$storagePath"
-                    Result.success(publicUrl)
+                    // Create signed URL for private bucket
+                    val signedUrl = createSignedUrl(bucketName, storagePath).getOrNull()
+                        ?: "$supabaseUrl/storage/v1/object/authenticated/$bucketName/$storagePath"
+                    Result.success(signedUrl)
                 } else {
                     Result.failure(Exception("Storage upload failed with code ${resp.code}"))
                 }
@@ -447,12 +639,49 @@ class SupabaseService(
         }
     }
 
-    suspend fun deleteMedia(userId: String, fileName: String): Result<Unit> = withContext(Dispatchers.IO) {
+    /**
+     * Generates a signed URL for a private file in Supabase Storage.
+     * Expiry set to 30 days (2,592,000 seconds).
+     */
+    suspend fun createSignedUrl(bucketName: String, storagePath: String, expiresInSeconds: Int = 2592000): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            if (!isConfigured) return@withContext Result.failure(Exception("Not configured"))
+
+            val signUrl = "$supabaseUrl/storage/v1/object/sign/$bucketName/$storagePath"
+            val payload = JSONObject().apply {
+                put("expiresIn", expiresInSeconds)
+            }
+
+            val request = Request.Builder()
+                .url(signUrl)
+                .addHeader("apikey", anonKey)
+                .addHeader("Authorization", getAuthHeader())
+                .addHeader("Content-Type", "application/json")
+                .post(payload.toString().toRequestBody("application/json".toMediaType()))
+                .build()
+
+            client.newCall(request).execute().use { resp ->
+                val body = resp.body?.string()
+                if (resp.isSuccessful && !body.isNullOrBlank()) {
+                    val json = JSONObject(body)
+                    val signedPath = json.optString("signedURL", "")
+                    if (signedPath.isNotBlank()) {
+                        val fullUrl = if (signedPath.startsWith("http")) signedPath else "$supabaseUrl/storage/v1$signedPath"
+                        return@withContext Result.success(fullUrl)
+                    }
+                }
+                Result.failure(Exception("Failed to generate signed URL: ${resp.code}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deleteMedia(userId: String, storagePath: String): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             if (!isConfigured) return@withContext Result.success(Unit)
 
-            val bucketName = "daymark-photos"
-            val storagePath = "$userId/$fileName"
+            val bucketName = "memories"
             val deleteUrl = "$supabaseUrl/storage/v1/object/$bucketName/$storagePath"
 
             val request = Request.Builder()

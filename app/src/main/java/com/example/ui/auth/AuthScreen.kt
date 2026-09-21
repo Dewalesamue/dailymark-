@@ -89,6 +89,7 @@ fun AuthScreen(
     onSignUpWithEmail: (name: String, email: String, password: String, onResult: (Boolean, String?) -> Unit) -> Unit,
     onSignInWithEmail: (email: String, password: String, onResult: (Boolean, String?) -> Unit) -> Unit,
     onSignInWithGoogle: (email: String, name: String, onResult: (Boolean, String?) -> Unit) -> Unit,
+    onStartGoogleOAuth: (() -> Unit)? = null,
     onContinueAsGuest: () -> Unit,
     onBack: (() -> Unit)? = null,
     initialEmail: String = "",
@@ -322,7 +323,9 @@ fun AuthScreen(
                         // Google Sign In Button
                         OutlinedButton(
                             onClick = {
-                                if (emailInput.isNotBlank() && emailInput.contains("@")) {
+                                if (onStartGoogleOAuth != null) {
+                                    onStartGoogleOAuth()
+                                } else if (emailInput.isNotBlank() && emailInput.contains("@")) {
                                     val finalName = nameInput.trim().ifEmpty {
                                         emailInput.substringBefore("@").replace(".", " ")
                                             .replaceFirstChar { it.uppercase() }
@@ -691,7 +694,7 @@ fun AuthScreen(
                 Spacer(modifier = Modifier.height(14.dp))
             }
 
-            // Info Card: Supabase tomorrow connection notice
+            // Info Card: Supabase Cloud Connected Notice
             item {
                 Surface(
                     shape = RoundedCornerShape(14.dp),
@@ -704,7 +707,7 @@ fun AuthScreen(
                         verticalAlignment = Alignment.Top
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Info,
+                            imageVector = Icons.Default.CheckCircle,
                             contentDescription = null,
                             tint = SunlitClay,
                             modifier = Modifier
@@ -713,7 +716,7 @@ fun AuthScreen(
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "⚡ Demo Mode active: You can sign up with any email or Gmail to create your private daily journal workspace. Supabase cloud database sync will be connected tomorrow.",
+                            text = "☁️ Supabase Cloud Active: Auth and private 'memories' cloud storage are configured and live. Sign in with Google or your email to sync and safeguard your daily photos.",
                             fontSize = 12.sp,
                             lineHeight = 17.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.9f)

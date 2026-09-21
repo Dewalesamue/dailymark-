@@ -109,7 +109,14 @@ class PhotoRepository(
                 ?: nowUtc
 
             // Cloud storage upload
-            val uploadResult = supabaseService.uploadMedia(userId, targetFile, "photo")
+            val dayId = "day_${userId}_$dateStr"
+            val uploadResult = supabaseService.uploadMedia(
+                userId = userId,
+                dayId = dayId,
+                fileId = photoId,
+                file = targetFile,
+                mediaType = "photo"
+            )
             val cloudUrl = uploadResult.getOrNull()
 
             val newPhoto = DailyPhoto(
@@ -191,8 +198,15 @@ class PhotoRepository(
                 retriever.release()
             } catch (_: Exception) {}
 
-            // Cloud upload to Supabase Storage
-            val uploadResult = supabaseService.uploadMedia(userId, targetFile, "video")
+            // Cloud upload to Supabase Storage bucket 'memories'
+            val dayId = "day_${userId}_$dateStr"
+            val uploadResult = supabaseService.uploadMedia(
+                userId = userId,
+                dayId = dayId,
+                fileId = videoId,
+                file = targetFile,
+                mediaType = "video"
+            )
             val cloudUrl = uploadResult.getOrNull()
 
             val newVideo = DailyPhoto(
@@ -263,7 +277,14 @@ class PhotoRepository(
                         }
                     }
 
-                    val uploadResult = supabaseService.uploadMedia(userId, targetFile, "video")
+                    val dayId = "day_${userId}_$dateStr"
+                    val uploadResult = supabaseService.uploadMedia(
+                        userId = userId,
+                        dayId = dayId,
+                        fileId = photoId,
+                        file = targetFile,
+                        mediaType = "video"
+                    )
                     val videoPhoto = DailyPhoto(
                         id = photoId,
                         userId = userId,
@@ -294,7 +315,14 @@ class PhotoRepository(
                     val exifData = ExifHelper.extractExifData(context, uri, today)
                     val capturedAt = exifData.captureTimeMillis ?: (nowUtc + index)
 
-                    val uploadResult = supabaseService.uploadMedia(userId, targetFile, "photo")
+                    val dayId = "day_${userId}_$dateStr"
+                    val uploadResult = supabaseService.uploadMedia(
+                        userId = userId,
+                        dayId = dayId,
+                        fileId = photoId,
+                        file = targetFile,
+                        mediaType = "photo"
+                    )
 
                     val photo = DailyPhoto(
                         id = photoId,
@@ -321,6 +349,72 @@ class PhotoRepository(
 
             Result.success(savedList)
         } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Section E: Migrates existing local-storage photos and days to Supabase
+     * under the newly authenticated user's account, then cleans up legacy local records.
+     */
+    suspend fun migrateLocalDataToUser(
+        newUserId: String,
+        onProgress: (current: Int, total: Int) -> Unit = { _, _ -> }
+    ): Result<Int> = withContext(Dispatchers.IO) {
+        try {
+            if (newUserId.isBlank() || newUserId == "local_user" || newUserId == "guest_user") {
+                return@withContext Result.success(0)
+            }
+
+            // Find all unmigrated guest/local photos
+            val guestPhotos = photoDao.getAllPhotosSync("guest_user")
+            val localPhotos = photoDao.getAllPhotosSync("local_user")
+            val allToMigrate = (guestPhotos + localPhotos).distinctBy { it.id }
+
+            if (allToMigrate.isEmpty()) {
+                return@withContext Result.success(0)
+            }
+
+            var migratedCount = 0
+            for (index in allToMigrate.indices) {
+                val photo = allToMigrate[index]
+                val localFile = File(photo.storagePath)
+                val dayId = "day_${newUserId}_${photo.journalDate}"
+
+                var uploadedCloudUrl = photo.photoUrl
+                if (localFile.exists() && supabaseService.isConfigured) {
+                    val uploadRes = supabaseService.uploadMedia(
+                        userId = newUserId,
+                        dayId = dayId,
+                        fileId = photo.id,
+                        file = localFile,
+                        mediaType = photo.mediaType
+                    )
+                    uploadedCloudUrl = uploadRes.getOrNull() ?: photo.photoUrl
+                }
+
+                val migratedPhoto = photo.copy(
+                    userId = newUserId,
+                    photoUrl = uploadedCloudUrl,
+                    updatedAt = System.currentTimeMillis()
+                )
+
+                photoDao.insertOrUpdate(migratedPhoto)
+                if (supabaseService.isConfigured) {
+                    supabaseService.upsertPhoto(migratedPhoto)
+                }
+                migratedCount++
+                onProgress(index + 1, allToMigrate.size)
+            }
+
+            // Clear legacy local storage rows to satisfy spec requirement:
+            // "then clear local storage - don't just strand whatever's already on the device"
+            photoDao.deleteAllForUser("local_user")
+            photoDao.deleteAllForUser("guest_user")
+
+            Result.success(migratedCount)
+        } catch (e: Exception) {
+            android.util.Log.e("PhotoRepository", "Local data migration error: ${e.message}", e)
             Result.failure(e)
         }
     }
@@ -364,8 +458,10 @@ class PhotoRepository(
         photoDao.deletePhoto(photo)
         supabaseService.deletePhoto(photo.id, userId)
         try {
-            val fileName = File(photo.storagePath).name
-            supabaseService.deleteMedia(userId, fileName)
+            val dayId = "day_${userId}_${photo.journalDate}"
+            val ext = if (photo.isVideo) "mp4" else "jpg"
+            val storagePath = "$userId/$dayId/${photo.id}.$ext"
+            supabaseService.deleteMedia(userId, storagePath)
         } catch (_: Exception) {}
     }
 

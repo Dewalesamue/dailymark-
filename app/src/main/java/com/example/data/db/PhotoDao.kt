@@ -13,6 +13,9 @@ interface PhotoDao {
     @Query("SELECT * FROM photos WHERE user_id = :userId ORDER BY journal_date DESC, captured_at DESC")
     fun getAllPhotos(userId: String): Flow<List<DailyPhoto>>
 
+    @Query("SELECT * FROM photos WHERE user_id = :userId ORDER BY journal_date DESC, captured_at DESC")
+    suspend fun getAllPhotosSync(userId: String): List<DailyPhoto>
+
     @Query("SELECT * FROM photos WHERE user_id = :userId AND journal_date = :journalDate ORDER BY captured_at ASC")
     fun getPhotosByDate(userId: String, journalDate: String): Flow<List<DailyPhoto>>
 

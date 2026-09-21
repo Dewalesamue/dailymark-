@@ -32,12 +32,22 @@ data class SupabaseAuthResponse(
 )
 
 @JsonClass(generateAdapter = true)
+data class SupabaseDay(
+    val id: String,
+    @Json(name = "user_id") val userId: String,
+    val date: String,
+    @Json(name = "custom_name") val customName: String? = null,
+    @Json(name = "created_at") val createdAt: String? = null
+)
+
+@JsonClass(generateAdapter = true)
 data class SupabaseRemotePhoto(
     val id: String,
+    @Json(name = "day_id") val dayId: String,
     @Json(name = "user_id") val userId: String,
     @Json(name = "storage_path") val storagePath: String,
     @Json(name = "photo_url") val photoUrl: String? = null,
-    @Json(name = "journal_date") val journalDate: String,
+    @Json(name = "journal_date") val journalDate: String = "",
     @Json(name = "captured_at") val capturedAt: Long = System.currentTimeMillis(),
     val caption: String? = null,
     val mood: String? = null,
@@ -48,12 +58,21 @@ data class SupabaseRemotePhoto(
     @Json(name = "updated_at") val updatedAt: Long = System.currentTimeMillis()
 ) {
     fun toDailyPhoto(): DailyPhoto {
+        val effectiveDate = if (journalDate.isNotBlank()) {
+            journalDate
+        } else {
+            // If journalDate not directly on photos table, derive from dayId format "day_{userId}_{date}" or storage path
+            dayId.substringAfterLast("_").takeIf { it.matches(Regex("\\d{4}-\\d{2}-\\d{2}")) }
+                ?: storagePath.split("/").getOrNull(1)?.removePrefix("day_")?.substringAfterLast("_")
+                ?: java.time.LocalDate.now().toString()
+        }
+
         return DailyPhoto(
             id = id,
             userId = userId,
             storagePath = storagePath,
             photoUrl = photoUrl,
-            journalDate = journalDate,
+            journalDate = effectiveDate,
             capturedAt = capturedAt,
             caption = caption,
             mood = mood,
@@ -67,8 +86,10 @@ data class SupabaseRemotePhoto(
 
     companion object {
         fun fromDailyPhoto(photo: DailyPhoto): SupabaseRemotePhoto {
+            val dayId = "day_${photo.userId}_${photo.journalDate}"
             return SupabaseRemotePhoto(
                 id = photo.id,
+                dayId = dayId,
                 userId = photo.userId,
                 storagePath = photo.storagePath,
                 photoUrl = photo.photoUrl,
@@ -90,7 +111,8 @@ data class SupabaseRemotePhoto(
 data class SupabaseProfile(
     val id: String,
     val email: String? = null,
-    @Json(name = "full_name") val fullName: String? = null,
+    val name: String? = null,
     @Json(name = "avatar_url") val avatarUrl: String? = null,
+    @Json(name = "created_at") val createdAt: String? = null,
     @Json(name = "updated_at") val updatedAt: Long? = System.currentTimeMillis()
 )

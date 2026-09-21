@@ -2,6 +2,7 @@ package com.example.data.repository
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.example.data.supabase.SupabaseConfig
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,8 +21,8 @@ data class UserSettings(
     val reminderMinute: Int = 0,
     val hapticsEnabled: Boolean = true,
     val configuredTimeZone: String = ZoneId.systemDefault().id,
-    val supabaseUrl: String = "",
-    val supabaseAnonKey: String = "",
+    val supabaseUrl: String = SupabaseConfig.DEFAULT_SUPABASE_URL,
+    val supabaseAnonKey: String = SupabaseConfig.DEFAULT_ANON_KEY,
     val isSignedIn: Boolean = false
 )
 
@@ -57,8 +58,8 @@ class SettingsRepository(context: Context) {
             reminderMinute = prefs.getInt("reminder_minute", 0),
             hapticsEnabled = prefs.getBoolean("haptics_enabled", true),
             configuredTimeZone = prefs.getString("configured_timezone", defaultTz) ?: defaultTz,
-            supabaseUrl = prefs.getString("supabase_url", "") ?: "",
-            supabaseAnonKey = prefs.getString("supabase_anon_key", "") ?: "",
+            supabaseUrl = prefs.getString("supabase_url", null)?.takeIf { it.isNotBlank() } ?: SupabaseConfig.DEFAULT_SUPABASE_URL,
+            supabaseAnonKey = prefs.getString("supabase_anon_key", null)?.takeIf { it.isNotBlank() } ?: SupabaseConfig.DEFAULT_ANON_KEY,
             isSignedIn = hasSession
         )
     }

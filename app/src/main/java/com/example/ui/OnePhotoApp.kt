@@ -123,6 +123,9 @@ fun OnePhotoApp(
                     onSignInWithGoogle = { email, name, onResult ->
                         viewModel.signInWithGoogle(email = email, name = name, onComplete = onResult)
                     },
+                    onStartGoogleOAuth = {
+                        viewModel.startGoogleOAuth(context)
+                    },
                     onContinueAsGuest = { viewModel.continueAsGuest() },
                     onBack = if (settings.isSignedIn) { { viewModel.closeAuthScreen() } } else null,
                     initialEmail = settings.userEmail

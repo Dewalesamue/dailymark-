@@ -674,7 +674,7 @@ fun ProfileScreen(
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = "Bucket: daymark-photos · $totalPhotos synced",
+                                    text = "Bucket: memories (private) · $totalPhotos synced",
                                     fontSize = 12.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                                 )
