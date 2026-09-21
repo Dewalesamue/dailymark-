@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -65,13 +66,20 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import com.example.R
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.data.repository.UserSettings
 import com.example.ui.JournalUiState
+import com.example.ui.theme.AshGrey
+import com.example.ui.theme.Charcoal
+import com.example.ui.theme.Porcelain
+import com.example.ui.theme.SandyClay
+import com.example.ui.theme.SunlitClay
 import java.io.File
 import java.util.Locale
 
@@ -265,14 +273,22 @@ fun ProfileScreen(
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                                     ) {
-                                        Icon(
-                                            imageVector = Icons.Default.CheckCircle,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(12.dp)
-                                        )
+                                        if (settings.userEmail.endsWith("@gmail.com")) {
+                                            Image(
+                                                painter = painterResource(id = R.drawable.ic_google_logo),
+                                                contentDescription = "Google",
+                                                modifier = Modifier.size(13.dp)
+                                            )
+                                        } else {
+                                            Icon(
+                                                imageVector = Icons.Default.CheckCircle,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(12.dp)
+                                            )
+                                        }
                                         Text(
-                                            text = "Google Account",
+                                            text = if (settings.userEmail.endsWith("@gmail.com")) "Google Account" else "Verified Account",
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.Medium,
                                             color = MaterialTheme.colorScheme.primary
@@ -283,24 +299,43 @@ fun ProfileScreen(
 
                             Spacer(modifier = Modifier.width(8.dp))
 
-                            // Edit Button
-                            OutlinedButton(
-                                onClick = { showEditProfileDialog = true },
-                                shape = RoundedCornerShape(12.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                                modifier = Modifier.testTag("edit_profile_button")
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                                horizontalAlignment = Alignment.End
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Edit,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = "Edit",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                )
+                                // Edit Button
+                                OutlinedButton(
+                                    onClick = { showEditProfileDialog = true },
+                                    shape = RoundedCornerShape(12.dp),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                    modifier = Modifier.testTag("edit_profile_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Edit,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "Edit",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+
+                                // Switch Account
+                                OutlinedButton(
+                                    onClick = onSignIn,
+                                    shape = RoundedCornerShape(12.dp),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                    modifier = Modifier.testTag("switch_account_button")
+                                ) {
+                                    Text(
+                                        text = "Switch",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
                             }
                         }
                     } else {
@@ -312,35 +347,40 @@ fun ProfileScreen(
                             Icon(
                                 imageVector = Icons.Default.AccountCircle,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
+                                tint = SunlitClay,
                                 modifier = Modifier.size(48.dp)
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = "You are signed out",
+                                text = "Personal Journal Sign In",
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "Sign in to sync your visual journal with Supabase Cloud.",
+                                text = "Sign up with your own Gmail or email to keep your memories organized.",
                                 fontSize = 12.sp,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Spacer(modifier = Modifier.height(12.dp))
                             Button(
                                 onClick = onSignIn,
-                                shape = RoundedCornerShape(12.dp),
+                                shape = RoundedCornerShape(14.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Charcoal,
+                                    contentColor = Porcelain
+                                ),
                                 modifier = Modifier.testTag("sign_in_button")
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Login,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
+                                Image(
+                                    painter = painterResource(id = R.drawable.ic_google_logo),
+                                    contentDescription = "Google Logo",
+                                    modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Sign In with Google")
+                                Text("Sign In with Google / Email")
                             }
                         }
                     }

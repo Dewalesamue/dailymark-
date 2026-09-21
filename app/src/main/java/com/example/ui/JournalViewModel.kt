@@ -39,6 +39,7 @@ import java.time.ZoneId
 sealed class Screen {
     data object MainTabs : Screen()
     data object Onboarding : Screen()
+    data object Auth : Screen()
     data object CameraCapture : Screen() // Camera is strictly for today's moment
     data class PhotoConfirm(
         val bitmap: Bitmap? = null,
@@ -524,9 +525,22 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
         openDateActionSheet(date)
     }
 
+    fun openAuthScreen() {
+        _currentScreen.value = Screen.Auth
+        HapticUtils.performHaptic(getApplication(), settings.value.hapticsEnabled, 20)
+    }
+
+    fun closeAuthScreen() {
+        _currentScreen.value = Screen.MainTabs
+    }
+
     fun completeOnboarding() {
         settingsRepository.setOnboardingCompleted(true)
-        _currentScreen.value = Screen.MainTabs
+        if (!settings.value.isSignedIn) {
+            _currentScreen.value = Screen.Auth
+        } else {
+            _currentScreen.value = Screen.MainTabs
+        }
         HapticUtils.performHaptic(getApplication(), true, 30)
     }
 
@@ -559,8 +573,98 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             supabaseService.signOut()
             settingsRepository.signOut()
+            _currentScreen.value = Screen.Auth
             HapticUtils.performHaptic(getApplication(), settings.value.hapticsEnabled, 25)
             _saveMessage.value = "Signed out"
+        }
+    }
+
+    fun signUpWithEmail(
+        name: String,
+        email: String,
+        password: String = "",
+        onComplete: (Boolean, String?) -> Unit = { _, _ -> }
+    ) {
+        viewModelScope.launch {
+            val trimmedEmail = email.trim().lowercase()
+            val trimmedName = name.trim().ifEmpty { trimmedEmail.substringBefore("@").replace(".", " ").capitalize() }
+            if (!trimmedEmail.contains("@") || !trimmedEmail.contains(".")) {
+                onComplete(false, "Please enter a valid email address.")
+                return@launch
+            }
+            _isSaving.value = true
+            _saveMessage.value = "Creating demo workspace for $trimmedName..."
+            val deterministicUid = "user_" + java.util.UUID.nameUUIDFromBytes(trimmedEmail.toByteArray()).toString()
+
+            settingsRepository.signInUser(
+                userId = deterministicUid,
+                email = trimmedEmail,
+                name = trimmedName
+            )
+            settingsRepository.setOnboardingCompleted(true)
+
+            // Try syncing cloud memories if configured
+            photoRepository.syncFromCloud(deterministicUid)
+
+            _saveMessage.value = "Welcome to Daymark, $trimmedName!"
+            _currentScreen.value = Screen.MainTabs
+            _isSaving.value = false
+            HapticUtils.performHaptic(getApplication(), settings.value.hapticsEnabled, 35)
+            onComplete(true, null)
+        }
+    }
+
+    fun signInWithEmail(
+        email: String,
+        password: String = "",
+        onComplete: (Boolean, String?) -> Unit = { _, _ -> }
+    ) {
+        viewModelScope.launch {
+            val trimmedEmail = email.trim().lowercase()
+            if (!trimmedEmail.contains("@") || !trimmedEmail.contains(".")) {
+                onComplete(false, "Please enter a valid email address.")
+                return@launch
+            }
+            _isSaving.value = true
+            _saveMessage.value = "Signing in to workspace..."
+            val deterministicUid = "user_" + java.util.UUID.nameUUIDFromBytes(trimmedEmail.toByteArray()).toString()
+
+            val existingName = if (settings.value.userEmail.equals(trimmedEmail, ignoreCase = true) && settings.value.userName.isNotBlank()) {
+                settings.value.userName
+            } else {
+                trimmedEmail.substringBefore("@").replace(".", " ")
+                    .replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+            }
+
+            settingsRepository.signInUser(
+                userId = deterministicUid,
+                email = trimmedEmail,
+                name = existingName
+            )
+            settingsRepository.setOnboardingCompleted(true)
+
+            photoRepository.syncFromCloud(deterministicUid)
+
+            _saveMessage.value = "Welcome back, $existingName!"
+            _currentScreen.value = Screen.MainTabs
+            _isSaving.value = false
+            HapticUtils.performHaptic(getApplication(), settings.value.hapticsEnabled, 30)
+            onComplete(true, null)
+        }
+    }
+
+    fun continueAsGuest() {
+        viewModelScope.launch {
+            val guestUid = "guest_user"
+            settingsRepository.signInUser(
+                userId = guestUid,
+                email = "guest@example.com",
+                name = "Guest User"
+            )
+            settingsRepository.setOnboardingCompleted(true)
+            _currentScreen.value = Screen.MainTabs
+            _saveMessage.value = "Exploring as Guest"
+            HapticUtils.performHaptic(getApplication(), settings.value.hapticsEnabled, 20)
         }
     }
 
@@ -590,6 +694,7 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
                     avatarUrl = authUser.avatarUrl ?: avatarUrl,
                     token = supabaseService.accessToken
                 )
+                settingsRepository.setOnboardingCompleted(true)
 
                 // Sync cloud memories for this authenticated user
                 _saveMessage.value = "Restoring cloud memories..."
@@ -604,6 +709,7 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
                 }
 
                 _saveMessage.value = "Signed in as ${authUser.displayName}"
+                _currentScreen.value = Screen.MainTabs
                 HapticUtils.performHaptic(getApplication(), settings.value.hapticsEnabled, 30)
                 onComplete(true, null)
             } else {

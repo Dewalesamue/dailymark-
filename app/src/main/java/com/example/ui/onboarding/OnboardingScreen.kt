@@ -81,10 +81,10 @@ private val steps = listOf(
         badge = "VISUAL CALENDAR"
     ),
     OnboardingStep(
-        title = "Private &\nOn-Device.",
-        subtitle = "Zero ads, zero accounts required, 100% saved on your device. Keep your memories safe and private.",
+        title = "Your Personal\nVisual Journal.",
+        subtitle = "Sign in with your own Gmail or email to keep your memories organized and backed up. Simple, private, and effortless.",
         icon = Icons.Default.NotificationsActive,
-        badge = "SAFE & SECURE"
+        badge = "DEMO AUTH"
     )
 )
 

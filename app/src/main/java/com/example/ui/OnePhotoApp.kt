@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.ui.auth.AuthScreen
 import com.example.ui.calendar.CalendarScreen
 import com.example.ui.camera.CameraCaptureScreen
 import com.example.ui.components.SavingProgressDialog
@@ -101,6 +102,30 @@ fun OnePhotoApp(
                 }
                 OnboardingScreen(
                     onComplete = { viewModel.completeOnboarding() }
+                )
+            }
+
+            is Screen.Auth -> {
+                BackHandler {
+                    if (settings.isSignedIn) {
+                        viewModel.closeAuthScreen()
+                    } else {
+                        viewModel.continueAsGuest()
+                    }
+                }
+                AuthScreen(
+                    onSignUpWithEmail = { name, email, password, onResult ->
+                        viewModel.signUpWithEmail(name, email, password, onResult)
+                    },
+                    onSignInWithEmail = { email, password, onResult ->
+                        viewModel.signInWithEmail(email, password, onResult)
+                    },
+                    onSignInWithGoogle = { email, name, onResult ->
+                        viewModel.signInWithGoogle(email = email, name = name, onComplete = onResult)
+                    },
+                    onContinueAsGuest = { viewModel.continueAsGuest() },
+                    onBack = if (settings.isSignedIn) { { viewModel.closeAuthScreen() } } else null,
+                    initialEmail = settings.userEmail
                 )
             }
 
@@ -399,7 +424,7 @@ fun OnePhotoApp(
                                     onUpdateHaptics = { enabled -> viewModel.updateHaptics(enabled) },
                                     onTestNotification = { viewModel.testReminderNotification() },
                                     onSignOut = { viewModel.signOut() },
-                                    onSignIn = { viewModel.signIn() },
+                                    onSignIn = { viewModel.openAuthScreen() },
                                     onResetOnboarding = { viewModel.resetOnboarding() }
                                 )
                             }
