@@ -51,6 +51,7 @@ import com.example.ui.camera.CameraCaptureScreen
 import com.example.ui.components.SavingProgressDialog
 import com.example.ui.detail.PhotoDetailScreen
 import com.example.ui.home.HomeScreen
+import com.example.ui.main.MainScreenLayout
 import com.example.ui.memories.MemoriesScreen
 import com.example.ui.notifications.NotificationsScreen
 import com.example.ui.onboarding.OnboardingScreen
@@ -128,7 +129,7 @@ fun OnePhotoApp(
                     },
                     onContinueAsGuest = { viewModel.continueAsGuest() },
                     onBack = if (settings.isSignedIn) { { viewModel.closeAuthScreen() } } else null,
-                    initialEmail = settings.userEmail
+                    initialEmail = if (settings.isSignedIn) settings.userEmail else ""
                 )
             }
 
@@ -244,201 +245,106 @@ fun OnePhotoApp(
                     }
                 }
 
-                Scaffold(
-                    snackbarHost = { SnackbarHost(snackbarHostState) },
-                    bottomBar = {
-                        val isDarkNav = MaterialTheme.colorScheme.background.red < 0.5f
-                        val navItemColors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = if (isDarkNav) Porcelain else Charcoal,
-                            selectedTextColor = if (isDarkNav) Porcelain else Charcoal,
-                            indicatorColor = if (isDarkNav) SandyClay.copy(alpha = 0.45f) else SunlitClay.copy(alpha = 0.45f),
-                            unselectedIconColor = if (isDarkNav) AshGrey else Charcoal.copy(alpha = 0.55f),
-                            unselectedTextColor = if (isDarkNav) AshGrey else Charcoal.copy(alpha = 0.65f)
-                        )
-
-                        NavigationBar(
-                            containerColor = if (isDarkNav) Charcoal else Porcelain,
-                            tonalElevation = 0.dp
-                        ) {
-                            NavigationBarItem(
-                                selected = uiState.currentTab == NavigationTab.HOME,
-                                onClick = { viewModel.selectTab(NavigationTab.HOME) },
-                                icon = {
-                                    Icon(
-                                        imageVector = if (uiState.currentTab == NavigationTab.HOME)
-                                            Icons.Default.Home else Icons.Outlined.Home,
-                                        contentDescription = "Home"
-                                    )
-                                },
-                                label = { Text("Home", fontSize = 11.sp) },
-                                colors = navItemColors,
-                                modifier = Modifier.testTag("nav_tab_home")
-                            )
-
-                            NavigationBarItem(
-                                selected = uiState.currentTab == NavigationTab.CALENDAR,
-                                onClick = { viewModel.selectTab(NavigationTab.CALENDAR) },
-                                icon = {
-                                    Icon(
-                                        imageVector = if (uiState.currentTab == NavigationTab.CALENDAR)
-                                            Icons.Default.CalendarMonth else Icons.Outlined.CalendarMonth,
-                                        contentDescription = "Calendar"
-                                    )
-                                },
-                                label = { Text("Calendar", fontSize = 11.sp) },
-                                colors = navItemColors,
-                                modifier = Modifier.testTag("nav_tab_calendar")
-                            )
-
-                            NavigationBarItem(
-                                selected = uiState.currentTab == NavigationTab.MEMORIES,
-                                onClick = { viewModel.selectTab(NavigationTab.MEMORIES) },
-                                icon = {
-                                    Icon(
-                                        imageVector = if (uiState.currentTab == NavigationTab.MEMORIES)
-                                            Icons.Default.PhotoLibrary else Icons.Outlined.PhotoLibrary,
-                                        contentDescription = "Memories"
-                                    )
-                                },
-                                label = { Text("Memories", fontSize = 11.sp) },
-                                colors = navItemColors,
-                                modifier = Modifier.testTag("nav_tab_memories")
-                            )
-
-                            NavigationBarItem(
-                                selected = uiState.currentTab == NavigationTab.PROFILE,
-                                onClick = { viewModel.selectTab(NavigationTab.PROFILE) },
-                                icon = {
-                                    Icon(
-                                        imageVector = if (uiState.currentTab == NavigationTab.PROFILE)
-                                            Icons.Default.Person else Icons.Outlined.Person,
-                                        contentDescription = "Profile"
-                                    )
-                                },
-                                label = { Text("Profile", fontSize = 11.sp) },
-                                colors = navItemColors,
-                                modifier = Modifier.testTag("nav_tab_profile")
-                            )
-                        }
-                    },
-                    floatingActionButton = {
-                        FloatingActionButton(
-                            onClick = { viewModel.openCameraForToday() },
-                            containerColor = SunlitClay,
-                            contentColor = Charcoal,
-                            shape = CircleShape,
-                            elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 4.dp),
-                            modifier = Modifier.testTag("fab_camera_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.CameraAlt,
-                                contentDescription = "Capture today's moment",
-                                modifier = Modifier.size(26.dp)
-                            )
-                        }
-                    },
-                    modifier = Modifier.fillMaxSize()
+                MainScreenLayout(
+                    selectedTab = uiState.currentTab,
+                    onTabSelected = { tab -> viewModel.selectTab(tab) },
+                    onFabClick = { viewModel.openCameraForToday() },
+                    snackbarHostState = snackbarHostState
                 ) { innerPadding ->
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(innerPadding)
-                    ) {
-                        when (uiState.currentTab) {
-                            NavigationTab.HOME -> {
-                                HomeScreen(
-                                    uiState = uiState,
-                                    userName = settings.userName,
-                                    profilePictureUri = settings.profilePictureUri,
-                                    onOpenCamera = { viewModel.openCameraForToday() },
-                                    onSelectGalleryUris = { uris ->
-                                        viewModel.handleGalleryPick(uris, viewModel.getTodayDate())
-                                    },
-                                    onOpenPhotoDetail = { id ->
-                                        val photo = uiState.photos.find { it.id == id }
-                                        val dateStr = photo?.journalDate ?: DateTimeUtils.toIsoDate(viewModel.getTodayDate())
-                                        viewModel.openDetailForDate(dateStr, id)
-                                    },
-                                    onOpenSettings = {
-                                        viewModel.selectTab(NavigationTab.PROFILE)
-                                    },
-                                    onOpenProfile = {
-                                        viewModel.selectTab(NavigationTab.PROFILE)
-                                    },
-                                    onNavigateToCalendar = {
-                                        viewModel.selectTab(NavigationTab.CALENDAR)
-                                    },
-                                    onNavigateToMemories = {
-                                        viewModel.selectTab(NavigationTab.MEMORIES)
-                                    },
-                                    onOpenNotifications = {
-                                        viewModel.openNotifications()
-                                    }
-                                )
-                            }
-
-                            NavigationTab.CALENDAR -> {
-                                CalendarScreen(
-                                    uiState = uiState,
-                                    onNavigateMonth = { delta -> viewModel.navigateMonth(delta) },
-                                    onJumpToToday = { viewModel.jumpToToday() },
-                                    onSelectDate = { date -> viewModel.selectDate(date) },
-                                    onOpenPhotoDetail = { id ->
-                                        val photo = uiState.photos.find { it.id == id }
-                                        val dateStr = photo?.journalDate ?: DateTimeUtils.toIsoDate(uiState.selectedDate)
-                                        viewModel.openDetailForDate(dateStr, id)
-                                    },
-                                    onCaptureForDate = { date ->
-                                        viewModel.openCameraForDate(date)
-                                    },
-                                    onPickForDate = { date, uris ->
-                                        viewModel.handleGalleryPick(uris, date)
-                                    },
-                                    onDismissActionSheet = {
-                                        viewModel.dismissDateActionSheet()
-                                    }
-                                )
-                            }
-
-                            NavigationTab.MEMORIES -> {
-                                MemoriesScreen(
-                                    uiState = uiState,
-                                    today = viewModel.getTodayDate(),
-                                    onOpenPhotoDetail = { id, dateStr ->
-                                        viewModel.openDetailForDate(dateStr, id)
-                                    },
-                                    onUpdateCustomName = { date, name ->
-                                        viewModel.setDayCustomTitle(date, name)
-                                    }
-                                )
-                            }
-
-                            NavigationTab.PROFILE -> {
-                                ProfileScreen(
-                                    uiState = uiState,
-                                    settings = settings,
-                                    onUpdateUserName = { name -> viewModel.updateUserName(name) },
-                                    onUpdateUserEmail = { email -> viewModel.updateUserEmail(email) },
-                                    onUpdateProfilePicture = { uri -> viewModel.updateProfilePicture(uri) },
-                                    onUpdateTheme = { theme -> viewModel.updateThemeMode(theme) },
-                                    onUpdateReminder = { enabled, hour, min ->
-                                        viewModel.updateReminder(enabled, hour, min)
-                                    },
-                                    onUpdateHaptics = { enabled -> viewModel.updateHaptics(enabled) },
-                                    onTestNotification = { viewModel.testReminderNotification() },
-                                    onSignOut = { viewModel.signOut() },
-                                    onSignIn = { viewModel.openAuthScreen() },
-                                    onResetOnboarding = { viewModel.resetOnboarding() }
-                                )
-                            }
-                        }
-
-                        // Progress dialog when saving multiple photos
-                        uiState.savingProgress?.let { progress ->
-                            SavingProgressDialog(
-                                progress = progress
+                    when (uiState.currentTab) {
+                        NavigationTab.HOME -> {
+                            HomeScreen(
+                                uiState = uiState,
+                                userName = settings.userName,
+                                profilePictureUri = settings.profilePictureUri,
+                                onOpenCamera = { viewModel.openCameraForToday() },
+                                onSelectGalleryUris = { uris ->
+                                    viewModel.handleGalleryPick(uris, viewModel.getTodayDate())
+                                },
+                                onOpenPhotoDetail = { id ->
+                                    val photo = uiState.photos.find { it.id == id }
+                                    val dateStr = photo?.journalDate ?: DateTimeUtils.toIsoDate(viewModel.getTodayDate())
+                                    viewModel.openDetailForDate(dateStr, id)
+                                },
+                                onOpenSettings = {
+                                    viewModel.selectTab(NavigationTab.PROFILE)
+                                },
+                                onOpenProfile = {
+                                    viewModel.selectTab(NavigationTab.PROFILE)
+                                },
+                                onNavigateToCalendar = {
+                                    viewModel.selectTab(NavigationTab.CALENDAR)
+                                },
+                                onNavigateToMemories = {
+                                    viewModel.selectTab(NavigationTab.MEMORIES)
+                                },
+                                onOpenNotifications = {
+                                    viewModel.openNotifications()
+                                }
                             )
                         }
+
+                        NavigationTab.CALENDAR -> {
+                            CalendarScreen(
+                                uiState = uiState,
+                                onNavigateMonth = { delta -> viewModel.navigateMonth(delta) },
+                                onJumpToToday = { viewModel.jumpToToday() },
+                                onSelectDate = { date -> viewModel.selectDate(date) },
+                                onOpenPhotoDetail = { id ->
+                                    val photo = uiState.photos.find { it.id == id }
+                                    val dateStr = photo?.journalDate ?: DateTimeUtils.toIsoDate(uiState.selectedDate)
+                                    viewModel.openDetailForDate(dateStr, id)
+                                },
+                                onCaptureForDate = { date ->
+                                    viewModel.openCameraForDate(date)
+                                },
+                                onPickForDate = { date, uris ->
+                                    viewModel.handleGalleryPick(uris, date)
+                                },
+                                onDismissActionSheet = {
+                                    viewModel.dismissDateActionSheet()
+                                }
+                            )
+                        }
+
+                        NavigationTab.MEMORIES -> {
+                            MemoriesScreen(
+                                uiState = uiState,
+                                today = viewModel.getTodayDate(),
+                                onOpenPhotoDetail = { id, dateStr ->
+                                    viewModel.openDetailForDate(dateStr, id)
+                                },
+                                onUpdateCustomName = { date, name ->
+                                    viewModel.setDayCustomTitle(date, name)
+                                }
+                            )
+                        }
+
+                        NavigationTab.PROFILE -> {
+                            ProfileScreen(
+                                uiState = uiState,
+                                settings = settings,
+                                onUpdateUserName = { name -> viewModel.updateUserName(name) },
+                                onUpdateUserEmail = { email -> viewModel.updateUserEmail(email) },
+                                onUpdateProfilePicture = { uri -> viewModel.updateProfilePicture(uri) },
+                                onUpdateTheme = { theme -> viewModel.updateThemeMode(theme) },
+                                onUpdateReminder = { enabled, hour, min ->
+                                    viewModel.updateReminder(enabled, hour, min)
+                                },
+                                onUpdateHaptics = { enabled -> viewModel.updateHaptics(enabled) },
+                                onTestNotification = { viewModel.testReminderNotification() },
+                                onSignOut = { viewModel.signOut() },
+                                onSignIn = { viewModel.openAuthScreen() },
+                                onResetOnboarding = { viewModel.resetOnboarding() }
+                            )
+                        }
+                    }
+
+                    // Progress dialog when saving multiple photos
+                    uiState.savingProgress?.let { progress ->
+                        SavingProgressDialog(
+                            progress = progress
+                        )
                     }
                 }
             }

@@ -203,14 +203,7 @@ class SupabaseService(
     ): Result<SupabaseAuthUser> = withContext(Dispatchers.IO) {
         try {
             if (!isConfigured) {
-                val fallbackUid = java.util.UUID.nameUUIDFromBytes(email.lowercase().toByteArray()).toString()
-                return@withContext Result.success(
-                    SupabaseAuthUser(
-                        id = fallbackUid,
-                        email = email,
-                        userMetadata = mapOf("name" to name, "full_name" to name)
-                    )
-                )
+                return@withContext Result.failure(Exception("Supabase URL or Anon key is not configured."))
             }
 
             val signupUrl = "$supabaseUrl/auth/v1/signup"
@@ -266,14 +259,7 @@ class SupabaseService(
     ): Result<SupabaseAuthUser> = withContext(Dispatchers.IO) {
         try {
             if (!isConfigured) {
-                val fallbackUid = java.util.UUID.nameUUIDFromBytes(email.lowercase().toByteArray()).toString()
-                return@withContext Result.success(
-                    SupabaseAuthUser(
-                        id = fallbackUid,
-                        email = email,
-                        userMetadata = mapOf("name" to email.substringBefore("@"))
-                    )
-                )
+                return@withContext Result.failure(Exception("Supabase URL or Anon key is not configured."))
             }
 
             val authUrl = "$supabaseUrl/auth/v1/token?grant_type=password"

@@ -1,6 +1,5 @@
 package com.example.ui.auth
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -103,9 +102,6 @@ fun AuthScreen(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
 
-    // Quick Google demo account switcher for easy evaluation
-    var showGoogleAccountPicker by remember { mutableStateOf(false) }
-
     val focusManager = LocalFocusManager.current
 
     Surface(
@@ -145,11 +141,11 @@ fun AuthScreen(
 
                     Spacer(modifier = Modifier.weight(1f))
 
-                    // Demo Mode Pill
+                    // Supabase Cloud Connected Badge
                     Surface(
                         shape = RoundedCornerShape(14.dp),
-                        color = SandyClay.copy(alpha = 0.35f),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, SandyClay)
+                        color = SunlitClay.copy(alpha = 0.25f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, SunlitClay.copy(alpha = 0.6f))
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -163,7 +159,7 @@ fun AuthScreen(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Demo Auth Mode",
+                                text = "Supabase Live",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Charcoal
@@ -320,7 +316,7 @@ fun AuthScreen(
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        // Google Sign In Button
+                        // Google Sign In Button (Uses native Credential Manager or fallback)
                         OutlinedButton(
                             onClick = {
                                 if (onStartGoogleOAuth != null) {
@@ -337,7 +333,7 @@ fun AuthScreen(
                                         if (!success) errorMessage = err
                                     }
                                 } else {
-                                    showGoogleAccountPicker = !showGoogleAccountPicker
+                                    errorMessage = "Please enter your email address below or use Google Sign-in"
                                 }
                             },
                             shape = RoundedCornerShape(24.dp),
@@ -359,103 +355,10 @@ fun AuthScreen(
                                 )
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Text(
-                                    text = if (emailInput.isNotBlank() && emailInput.endsWith("@gmail.com"))
-                                        "Continue as ${emailInput.substringBefore("@")}"
-                                    else
-                                        "Continue with Gmail Account",
+                                    text = "Continue with Google",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 14.sp
                                 )
-                            }
-                        }
-
-                        // Quick demo accounts drawer for easy verification
-                        AnimatedVisibility(visible = showGoogleAccountPicker) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 12.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Text(
-                                    text = "Select a demo Google account or type your own below:",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-
-                                val sampleAccounts = listOf(
-                                    Pair("Sara Jenkins", "sara.jenkins@gmail.com"),
-                                    Pair("Sam Adeleke", "adelekesam10@gmail.com"),
-                                    Pair("Alex Rivera", "alex.rivera@gmail.com")
-                                )
-
-                                sampleAccounts.forEach { (sampleName, sampleEmail) ->
-                                    Surface(
-                                        shape = RoundedCornerShape(12.dp),
-                                        color = AshGrey.copy(alpha = 0.15f),
-                                        border = androidx.compose.foundation.BorderStroke(1.dp, AshGrey.copy(alpha = 0.3f)),
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable {
-                                                nameInput = sampleName
-                                                emailInput = sampleEmail
-                                                showGoogleAccountPicker = false
-                                                isLoading = true
-                                                onSignInWithGoogle(sampleEmail, sampleName) { success, err ->
-                                                    isLoading = false
-                                                    if (!success) errorMessage = err
-                                                }
-                                            }
-                                    ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-                                        ) {
-                                            Box(
-                                                modifier = Modifier.size(32.dp),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Surface(
-                                                    shape = CircleShape,
-                                                    color = SandyClay,
-                                                    modifier = Modifier.size(30.dp)
-                                                ) {
-                                                    Box(contentAlignment = Alignment.Center) {
-                                                        Text(
-                                                            text = sampleName.take(1),
-                                                            fontWeight = FontWeight.Bold,
-                                                            color = Charcoal
-                                                        )
-                                                    }
-                                                }
-                                                Image(
-                                                    painter = painterResource(id = R.drawable.ic_google_logo),
-                                                    contentDescription = null,
-                                                    modifier = Modifier
-                                                        .size(12.dp)
-                                                        .align(Alignment.BottomEnd)
-                                                        .background(androidx.compose.ui.graphics.Color.White, CircleShape)
-                                                        .padding(1.dp)
-                                                )
-                                            }
-                                            Spacer(modifier = Modifier.width(10.dp))
-                                            Column {
-                                                Text(
-                                                    text = sampleName,
-                                                    fontSize = 13.sp,
-                                                    fontWeight = FontWeight.SemiBold,
-                                                    color = MaterialTheme.colorScheme.onSurface
-                                                )
-                                                Text(
-                                                    text = sampleEmail,
-                                                    fontSize = 11.sp,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
                             }
                         }
                     }
@@ -569,7 +472,7 @@ fun AuthScreen(
                             passwordInput = it
                             errorMessage = null
                         },
-                        label = { Text("Password (Demo)") },
+                        label = { Text("Password") },
                         placeholder = { Text("••••••••") },
                         leadingIcon = {
                             Icon(
@@ -639,6 +542,10 @@ fun AuthScreen(
                         val email = emailInput.trim()
                         if (email.isBlank() || !email.contains("@") || !email.contains(".")) {
                             errorMessage = "Please enter a valid Gmail or email address."
+                            return@Button
+                        }
+                        if (passwordInput.isBlank() || passwordInput.length < 6) {
+                            errorMessage = "Password must be at least 6 characters."
                             return@Button
                         }
 
@@ -716,7 +623,7 @@ fun AuthScreen(
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "☁️ Supabase Cloud Active: Auth and private 'memories' cloud storage are configured and live. Sign in with Google or your email to sync and safeguard your daily photos.",
+                            text = "Cloud Sync Active: Live Supabase Auth and private cloud storage are connected. Sign in with Google or your email to sync and safeguard your daily memories.",
                             fontSize = 12.sp,
                             lineHeight = 17.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.9f)

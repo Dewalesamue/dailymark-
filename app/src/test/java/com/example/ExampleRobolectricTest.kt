@@ -150,16 +150,16 @@ class ExampleRobolectricTest {
     val context = ApplicationProvider.getApplicationContext<Context>()
     val repo = com.example.data.repository.SettingsRepository(context)
 
-    repo.setUserEmail("adelekesam10@gmail.com")
-    assertEquals("adelekesam10@gmail.com", repo.settings.value.userEmail)
+    repo.setUserEmail("user@example.com")
+    assertEquals("user@example.com", repo.settings.value.userEmail)
 
-    repo.setUserName("Sam Adeleke")
-    assertEquals("Sam Adeleke", repo.settings.value.userName)
+    repo.setUserName("Test User")
+    assertEquals("Test User", repo.settings.value.userName)
 
     repo.signOut()
     assertEquals(false, repo.settings.value.isSignedIn)
 
-    repo.signIn("adelekesam10@gmail.com", "Sam Adeleke")
+    repo.signIn("user@example.com", "Test User")
     assertEquals(true, repo.settings.value.isSignedIn)
   }
 
@@ -175,5 +175,72 @@ class ExampleRobolectricTest {
     val totalPhotos = photos.size
     assertEquals(3, daysCaptured)
     assertEquals(4, totalPhotos)
+  }
+
+  @Test
+  fun `test acceptance scenario user session persistence and multi-user data isolation`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val repo = com.example.data.repository.SettingsRepository(context)
+
+    // 1. Sign in with User 1
+    val user1Id = "c1a9d592-3a59-450f-9022-771be7ad7b26"
+    val user1Email = "primary.user@gmail.com"
+    val user1Name = "Primary User"
+    repo.signInUser(user1Id, user1Email, user1Name, token = "test_token_1")
+
+    assertTrue(repo.settings.value.isSignedIn)
+    assertEquals(user1Id, repo.settings.value.userId)
+    assertEquals(user1Email, repo.settings.value.userEmail)
+
+    // Photos belonging to user 1 vs user 2
+    val user1Photos = listOf(
+      DailyPhoto(id = "p1_1", userId = user1Id, journalDate = "2026-09-21", storagePath = "$user1Id/day_1/1.jpg")
+    )
+    val user2Id = "d2b8e481-2b48-440e-8011-660ad6bc6a15"
+    val user2Photos = listOf(
+      DailyPhoto(id = "p2_1", userId = user2Id, journalDate = "2026-09-21", storagePath = "$user2Id/day_1/2.jpg")
+    )
+
+    // Data isolation check: User 1 photos only contain user1Id
+    assertEquals(1, user1Photos.filter { it.userId == repo.settings.value.userId }.size)
+    assertEquals(0, user2Photos.filter { it.userId == repo.settings.value.userId }.size)
+
+    // 2. Sign out User 1
+    repo.signOut()
+    assertFalse(repo.settings.value.isSignedIn)
+    assertEquals("", repo.settings.value.userId)
+
+    // 3. Sign in with a second, different account (User 2)
+    val user2Email = "second.user@gmail.com"
+    val user2Name = "Alex Second"
+    repo.signInUser(user2Id, user2Email, user2Name, token = "test_token_2")
+
+    assertTrue(repo.settings.value.isSignedIn)
+    assertEquals(user2Id, repo.settings.value.userId)
+    assertEquals(user2Email, repo.settings.value.userEmail)
+
+    // Verify isolation: User 2 sees only User 2 photos, none of User 1's photos
+    assertEquals(0, user1Photos.filter { it.userId == repo.settings.value.userId }.size)
+    assertEquals(1, user2Photos.filter { it.userId == repo.settings.value.userId }.size)
+  }
+
+  @Test
+  fun `test native google sign in data model and client id string`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val webClientId = context.getString(R.string.default_web_client_id)
+    assertTrue(webClientId.isNotBlank())
+    assertTrue(webClientId.contains("apps.googleusercontent.com"))
+
+    val result = com.example.util.GoogleSignInResult(
+      idToken = "mock_id_token_12345",
+      email = "newuser@gmail.com",
+      displayName = "New User",
+      profilePictureUri = "https://lh3.googleusercontent.com/a/test",
+      givenName = "New",
+      familyName = "User"
+    )
+    assertEquals("mock_id_token_12345", result.idToken)
+    assertEquals("newuser@gmail.com", result.email)
+    assertEquals("New User", result.displayName)
   }
 }

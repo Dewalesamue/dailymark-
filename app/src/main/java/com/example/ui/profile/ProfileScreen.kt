@@ -212,7 +212,7 @@ fun ProfileScreen(
                                                     .trim()
                                                     .take(1)
                                                     .uppercase(Locale.ROOT)
-                                                    .ifEmpty { "S" }
+                                                    .ifEmpty { if (settings.userEmail.isNotBlank()) settings.userEmail.take(1).uppercase(Locale.ROOT) else "U" }
                                                 Text(
                                                     text = initial,
                                                     fontSize = 26.sp,

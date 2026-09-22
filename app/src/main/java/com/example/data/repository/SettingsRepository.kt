@@ -137,9 +137,10 @@ class SettingsRepository(context: Context) {
         )
     }
 
-    fun signIn(email: String = "adelekesam10@gmail.com", name: String = "Sam Adeleke") {
+    fun signIn(email: String, name: String = "") {
+        val finalName = name.ifBlank { email.substringBefore("@") }
         val deterministicUid = "user_" + java.util.UUID.nameUUIDFromBytes(email.lowercase().toByteArray()).toString()
-        signInUser(deterministicUid, email, name)
+        signInUser(deterministicUid, email, finalName)
     }
 
     fun setThemeMode(mode: String) {

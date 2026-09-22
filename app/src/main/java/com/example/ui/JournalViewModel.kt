@@ -14,8 +14,10 @@ import com.example.data.repository.PhotoRepository
 import com.example.data.repository.SettingsRepository
 import com.example.data.repository.UserSettings
 import com.example.data.supabase.SupabaseService
+import com.example.util.CredentialManagerHelper
 import com.example.util.DateTimeUtils
 import com.example.util.ExifHelper
+import com.example.util.GoogleSignInResult
 import com.example.util.HapticUtils
 import com.example.util.ReminderManager
 import kotlinx.coroutines.Dispatchers
@@ -619,21 +621,14 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
                 onComplete(false, "Please enter a valid email address.")
                 return@launch
             }
+            if (password.isBlank() || password.length < 6) {
+                onComplete(false, "Password must be at least 6 characters.")
+                return@launch
+            }
             _isSaving.value = true
             _saveMessage.value = "Creating Supabase account for $trimmedName..."
 
-            val result = if (supabaseService.isConfigured && password.isNotBlank()) {
-                supabaseService.signUpWithEmail(trimmedEmail, password, trimmedName)
-            } else {
-                val deterministicUid = "user_" + java.util.UUID.nameUUIDFromBytes(trimmedEmail.toByteArray()).toString()
-                Result.success(
-                    com.example.data.supabase.SupabaseAuthUser(
-                        id = deterministicUid,
-                        email = trimmedEmail,
-                        userMetadata = mapOf("name" to trimmedName, "full_name" to trimmedName)
-                    )
-                )
-            }
+            val result = supabaseService.signUpWithEmail(trimmedEmail, password, trimmedName)
 
             if (result.isSuccess) {
                 val authUser = result.getOrThrow()
@@ -678,27 +673,14 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
                 onComplete(false, "Please enter a valid email address.")
                 return@launch
             }
+            if (password.isBlank() || password.length < 6) {
+                onComplete(false, "Password must be at least 6 characters.")
+                return@launch
+            }
             _isSaving.value = true
             _saveMessage.value = "Signing in to Supabase..."
 
-            val result = if (supabaseService.isConfigured && password.isNotBlank()) {
-                supabaseService.signInWithEmail(trimmedEmail, password)
-            } else {
-                val deterministicUid = "user_" + java.util.UUID.nameUUIDFromBytes(trimmedEmail.toByteArray()).toString()
-                val existingName = if (settings.value.userEmail.equals(trimmedEmail, ignoreCase = true) && settings.value.userName.isNotBlank()) {
-                    settings.value.userName
-                } else {
-                    trimmedEmail.substringBefore("@").replace(".", " ")
-                        .replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
-                }
-                Result.success(
-                    com.example.data.supabase.SupabaseAuthUser(
-                        id = deterministicUid,
-                        email = trimmedEmail,
-                        userMetadata = mapOf("name" to existingName, "full_name" to existingName)
-                    )
-                )
-            }
+            val result = supabaseService.signInWithEmail(trimmedEmail, password)
 
             if (result.isSuccess) {
                 val authUser = result.getOrThrow()
@@ -816,26 +798,83 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
     }
 
     /**
-     * Section A: Triggers Google OAuth sign-in flow via Supabase Auth redirect.
-     * When configured, opens browser with Supabase OAuth authorize endpoint.
-     * Redirects back to app via onephotoday://auth-callback.
+     * Native Android Google Sign-in flow using Credential Manager API (androidx.credentials).
+     * Retrieves Google ID token via the native Android account picker (no browser, no localhost redirect),
+     * and passes it directly to Supabase via supabase.auth.signInWithIdToken / signInWithGoogle.
+     */
+    fun signInWithNativeGoogle(
+        context: Context,
+        onComplete: (Boolean, String?) -> Unit = { _, _ -> }
+    ) {
+        viewModelScope.launch {
+            _isSaving.value = true
+            _saveMessage.value = "Signing in with Google..."
+
+            val credResult = CredentialManagerHelper.getGoogleIdToken(context)
+            if (credResult.isFailure) {
+                val error = credResult.exceptionOrNull()?.message ?: "Google sign-in was cancelled or failed"
+                _saveMessage.value = error
+                _isSaving.value = false
+                onComplete(false, error)
+                return@launch
+            }
+
+            val googleData = credResult.getOrThrow()
+            _saveMessage.value = "Authenticating with Supabase..."
+
+            val result = supabaseService.signInWithGoogle(
+                idToken = googleData.idToken,
+                email = googleData.email,
+                name = googleData.displayName ?: googleData.email.substringBefore("@"),
+                avatarUrl = googleData.profilePictureUri
+            )
+
+            if (result.isSuccess) {
+                val authUser = result.getOrThrow()
+                settingsRepository.signInUser(
+                    userId = authUser.id,
+                    email = authUser.email ?: googleData.email,
+                    name = authUser.displayName,
+                    avatarUrl = authUser.avatarUrl ?: googleData.profilePictureUri,
+                    token = supabaseService.accessToken
+                )
+                settingsRepository.setOnboardingCompleted(true)
+
+                // Migrate existing local data to newly authenticated Supabase account
+                _saveMessage.value = "Migrating local memories..."
+                photoRepository.migrateLocalDataToUser(authUser.id)
+
+                // Sync cloud memories for this authenticated user
+                _saveMessage.value = "Restoring cloud memories..."
+                photoRepository.syncFromCloud(authUser.id)
+
+                // Sync custom day titles
+                val daysResult = supabaseService.fetchDays(authUser.id)
+                if (daysResult.isSuccess) {
+                    daysResult.getOrNull()?.forEach { (date, title) ->
+                        settingsRepository.setDayCustomTitle(date, title)
+                    }
+                }
+
+                _saveMessage.value = "Signed in as ${authUser.displayName}"
+                _currentScreen.value = Screen.MainTabs
+                HapticUtils.performHaptic(getApplication(), settings.value.hapticsEnabled, 30)
+                onComplete(true, null)
+            } else {
+                val error = result.exceptionOrNull()?.message ?: "Supabase authentication failed"
+                _saveMessage.value = error
+                onComplete(false, error)
+            }
+            _isSaving.value = false
+        }
+    }
+
+    /**
+     * Google Sign-in entry point for UI.
+     * Uses native Credential Manager flow directly (no browser, no web redirect).
      */
     fun startGoogleOAuth(context: Context) {
-        if (supabaseService.isConfigured) {
-            val oauthUrl = supabaseService.getGoogleOAuthUrl("onephotoday://auth-callback")
-            try {
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(oauthUrl)).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                context.startActivity(intent)
-            } catch (e: Exception) {
-                // If browser launch fails, fall back to direct sign in with user profile
-                signInWithGoogle(email = "adelekesam10@gmail.com", name = "Sam Adeleke")
-            }
-        } else {
-            // One-click demo sign-in for seamless verification
-            signInWithGoogle(email = "adelekesam10@gmail.com", name = "Sam Adeleke")
-        }
+        signInWithNativeGoogle(context)
     }
 
     /**
@@ -868,7 +907,7 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
                     val authUser = userResult.getOrThrow()
                     settingsRepository.signInUser(
                         userId = authUser.id,
-                        email = authUser.email ?: "adelekesam10@gmail.com",
+                        email = authUser.email ?: "",
                         name = authUser.displayName,
                         avatarUrl = authUser.avatarUrl,
                         token = accessToken
@@ -905,8 +944,8 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
     /**
      * Backward-compatible alias for existing callers.
      */
-    fun signIn(email: String = "adelekesam10@gmail.com", name: String = "Sam Adeleke") {
-        signInWithGoogle(email = email, name = name)
+    fun signIn(email: String, name: String = "") {
+        signInWithGoogle(email = email, name = name.ifBlank { email.substringBefore("@") })
     }
 
     fun updateProfilePicture(uriString: String?) {

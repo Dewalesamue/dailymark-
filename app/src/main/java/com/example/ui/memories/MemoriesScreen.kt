@@ -880,7 +880,7 @@ private fun DayCustomNameDialog(
                 OutlinedTextField(
                     value = nameText,
                     onValueChange = { nameText = it },
-                    placeholder = { Text("e.g. Sam's Birthday, Beach Trip") },
+                    placeholder = { Text("e.g. Summer Road Trip, Birthday Party") },
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
