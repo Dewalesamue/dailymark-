@@ -17,6 +17,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         handleAuthIntent(intent)
+        handleNotificationIntent(intent)
         setContent {
             OnePhotoApp(viewModel = viewModel)
         }
@@ -26,6 +27,13 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleAuthIntent(intent)
+        handleNotificationIntent(intent)
+    }
+
+    private fun handleNotificationIntent(intent: Intent?) {
+        if (intent?.getBooleanExtra("from_notification", false) == true) {
+            viewModel.openCameraForToday()
+        }
     }
 
     private fun handleAuthIntent(intent: Intent?) {

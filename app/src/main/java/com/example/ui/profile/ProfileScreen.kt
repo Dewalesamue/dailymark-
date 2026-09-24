@@ -1,10 +1,14 @@
 package com.example.ui.profile
 
+import android.Manifest
 import android.app.TimePickerDialog
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -75,11 +79,10 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.data.repository.UserSettings
 import com.example.ui.JournalUiState
+import com.example.ui.theme.Accent
 import com.example.ui.theme.AshGrey
 import com.example.ui.theme.Charcoal
 import com.example.ui.theme.Porcelain
-import com.example.ui.theme.SandyClay
-import com.example.ui.theme.SunlitClay
 import java.io.File
 import java.util.Locale
 
@@ -110,6 +113,14 @@ fun ProfileScreen(
     ) { uri: Uri? ->
         if (uri != null) {
             onUpdateProfilePicture(uri.toString())
+        }
+    }
+
+    val notifPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            onUpdateReminder(true, settings.reminderHour, settings.reminderMinute)
         }
     }
 
@@ -299,43 +310,24 @@ fun ProfileScreen(
 
                             Spacer(modifier = Modifier.width(8.dp))
 
-                            Column(
-                                verticalArrangement = Arrangement.spacedBy(6.dp),
-                                horizontalAlignment = Alignment.End
+                            // Edit Profile Button
+                            OutlinedButton(
+                                onClick = { showEditProfileDialog = true },
+                                shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                modifier = Modifier.testTag("edit_profile_button")
                             ) {
-                                // Edit Button
-                                OutlinedButton(
-                                    onClick = { showEditProfileDialog = true },
-                                    shape = RoundedCornerShape(12.dp),
-                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                    modifier = Modifier.testTag("edit_profile_button")
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Edit,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(13.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = "Edit",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                }
-
-                                // Switch Account
-                                OutlinedButton(
-                                    onClick = onSignIn,
-                                    shape = RoundedCornerShape(12.dp),
-                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                    modifier = Modifier.testTag("switch_account_button")
-                                ) {
-                                    Text(
-                                        text = "Switch",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                }
+                                Icon(
+                                    imageVector = Icons.Default.Edit,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "Edit",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
                             }
                         }
                     } else {
@@ -347,7 +339,7 @@ fun ProfileScreen(
                             Icon(
                                 imageVector = Icons.Default.AccountCircle,
                                 contentDescription = null,
-                                tint = SunlitClay,
+                                tint = Accent,
                                 modifier = Modifier.size(48.dp)
                             )
                             Spacer(modifier = Modifier.height(8.dp))
@@ -504,11 +496,13 @@ fun ProfileScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.Notifications,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp)
+                            Image(
+                                painter = painterResource(id = R.drawable.img_3d_bell_notification_1790255229641),
+                                contentDescription = "Daily Reminder",
+                                modifier = Modifier
+                                    .size(26.dp)
+                                    .clip(RoundedCornerShape(6.dp)),
+                                contentScale = ContentScale.Fit
                             )
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
@@ -529,8 +523,19 @@ fun ProfileScreen(
                         Switch(
                             checked = settings.reminderEnabled,
                             onCheckedChange = { checked ->
-                                onUpdateReminder(checked, settings.reminderHour, settings.reminderMinute)
-                            }
+                                if (checked && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                    ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                                    notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                } else {
+                                    onUpdateReminder(checked, settings.reminderHour, settings.reminderMinute)
+                                }
+                            },
+                            colors = androidx.compose.material3.SwitchDefaults.colors(
+                                checkedThumbColor = Porcelain,
+                                checkedTrackColor = Accent,
+                                uncheckedThumbColor = AshGrey,
+                                uncheckedTrackColor = AshGrey.copy(alpha = 0.3f)
+                            )
                         )
                     }
 
@@ -591,8 +596,13 @@ fun ProfileScreen(
 
                         OutlinedButton(
                             onClick = {
-                                onTestNotification()
-                                showNotificationSentToast = true
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                    ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                                    notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                } else {
+                                    onTestNotification()
+                                    showNotificationSentToast = true
+                                }
                             },
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.fillMaxWidth()
@@ -643,49 +653,13 @@ fun ProfileScreen(
 
                         Switch(
                             checked = settings.hapticsEnabled,
-                            onCheckedChange = onUpdateHaptics
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(18.dp))
-
-                    // Supabase Cloud Storage (Replaces Local Storage)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.CloudDone,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp)
+                            onCheckedChange = onUpdateHaptics,
+                            colors = androidx.compose.material3.SwitchDefaults.colors(
+                                checkedThumbColor = Porcelain,
+                                checkedTrackColor = Accent,
+                                uncheckedThumbColor = AshGrey,
+                                uncheckedTrackColor = AshGrey.copy(alpha = 0.3f)
                             )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                Text(
-                                    text = "Supabase Storage",
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    text = "Bucket: memories (private) · $totalPhotos synced",
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                                )
-                            }
-                        }
-
-                        Text(
-                            text = supabaseStorageSizeMb,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
                         )
                     }
 

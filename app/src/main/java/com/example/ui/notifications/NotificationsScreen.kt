@@ -1,5 +1,15 @@
 package com.example.ui.notifications
 
+import android.Manifest
+import android.app.TimePickerDialog
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -26,6 +36,8 @@ import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.NotificationsOff
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Vibration
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -34,6 +46,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -42,6 +55,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,12 +65,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.example.R
 import com.example.data.repository.UserSettings
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 @Composable
 fun NotificationsScreen(
@@ -67,12 +91,54 @@ fun NotificationsScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
-    var showTimeDialog by remember { mutableStateOf(false) }
-    var selectedHour by remember { mutableStateOf(settings.reminderHour) }
-    var selectedMinute by remember { mutableStateOf(settings.reminderMinute) }
+    // Helper to evaluate runtime notification permission
+    fun checkPermission(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+        } else {
+            NotificationManagerCompat.from(context).areNotificationsEnabled()
+        }
+    }
+
+    var hasNotificationPermission by remember { mutableStateOf(checkPermission()) }
+
+    // Re-verify permission whenever returning to the screen from settings
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                hasNotificationPermission = checkPermission()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    // Permission launcher for Android 13+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        hasNotificationPermission = isGranted
+        if (isGranted) {
+            onUpdateReminder(true, settings.reminderHour, settings.reminderMinute)
+            scope.launch {
+                snackbarHostState.showSnackbar("Notifications enabled! Daily reminders are active.")
+            }
+        } else {
+            scope.launch {
+                snackbarHostState.showSnackbar("Notifications permission denied. Enable in System Settings.")
+            }
+        }
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -114,7 +180,7 @@ fun NotificationsScreen(
                             color = MaterialTheme.colorScheme.onBackground
                         )
                         Text(
-                            text = "Daily capture & evening reminders",
+                            text = "Daily capture & evening prompts",
                             fontSize = 13.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -125,13 +191,13 @@ fun NotificationsScreen(
                         modifier = Modifier
                             .size(40.dp)
                             .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.secondary)
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f))
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Notifications,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSecondary,
-                            modifier = Modifier.size(20.dp)
+                        Image(
+                            painter = painterResource(id = R.drawable.img_3d_bell_notification_1790255229641),
+                            contentDescription = "Notification Bell",
+                            modifier = Modifier.size(26.dp),
+                            contentScale = ContentScale.Fit
                         )
                     }
                 }
@@ -152,6 +218,154 @@ fun NotificationsScreen(
                 .fillMaxSize()
                 .navigationBarsPadding()
         ) {
+            // Permission Warning Card if notifications are not enabled
+            if (!hasNotificationPermission) {
+                item {
+                    Card(
+                        shape = RoundedCornerShape(22.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f)
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f), RoundedCornerShape(22.dp))
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(18.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Box(
+                                    contentAlignment = Alignment.Center,
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.error.copy(alpha = 0.15f))
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.NotificationsOff,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                Text(
+                                    text = "Notifications Disabled in System",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
+
+                            Text(
+                                text = "To receive gentle daily reminders to take your photo, allow notification permission for One Photo a Day.",
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                lineHeight = 18.sp
+                            )
+
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    Button(
+                                        onClick = {
+                                            permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                        },
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = MaterialTheme.colorScheme.error,
+                                            contentColor = MaterialTheme.colorScheme.onError
+                                        ),
+                                        shape = RoundedCornerShape(12.dp),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Text("Allow Notifications", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                    }
+                                }
+
+                                OutlinedButton(
+                                    onClick = {
+                                        try {
+                                            val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                                                putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                                            }
+                                            context.startActivity(intent)
+                                        } catch (_: Exception) {
+                                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                                data = Uri.fromParts("package", context.packageName, null)
+                                            }
+                                            context.startActivity(intent)
+                                        }
+                                    },
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Modifier.weight(1f) else Modifier.fillMaxWidth()
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Settings,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Open Settings", fontSize = 13.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Active status pill
+                item {
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primary)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onPrimary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                            val ampm = if (settings.reminderHour >= 12) "PM" else "AM"
+                            val displayHour = when {
+                                settings.reminderHour == 0 -> 12
+                                settings.reminderHour > 12 -> settings.reminderHour - 12
+                                else -> settings.reminderHour
+                            }
+                            val timeStr = String.format(Locale.US, "%d:%02d %s", displayHour, settings.reminderMinute, ampm)
+                            Text(
+                                text = if (settings.reminderEnabled) "Daily reminders active at $timeStr" else "Reminders paused (toggle below to activate)",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
+                }
+            }
+
             // Daily Reminder Switch Card
             item {
                 Card(
@@ -160,7 +374,7 @@ fun NotificationsScreen(
                     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f), RoundedCornerShape(24.dp))
+                        .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f), RoundedCornerShape(24.dp))
                 ) {
                     Column(
                         modifier = Modifier
@@ -209,7 +423,11 @@ fun NotificationsScreen(
                             Switch(
                                 checked = settings.reminderEnabled,
                                 onCheckedChange = { enabled ->
-                                    onUpdateReminder(enabled, settings.reminderHour, settings.reminderMinute)
+                                    if (enabled && !hasNotificationPermission && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                        permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                    } else {
+                                        onUpdateReminder(enabled, settings.reminderHour, settings.reminderMinute)
+                                    }
                                 },
                                 colors = SwitchDefaults.colors(
                                     checkedThumbColor = Color.White,
@@ -227,7 +445,23 @@ fun NotificationsScreen(
                                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { showTimeDialog = true }
+                                    .clickable {
+                                        TimePickerDialog(
+                                            context,
+                                            { _, hourOfDay, minute ->
+                                                onUpdateReminder(true, hourOfDay, minute)
+                                                scope.launch {
+                                                    val ampm = if (hourOfDay >= 12) "PM" else "AM"
+                                                    val h = if (hourOfDay == 0) 12 else if (hourOfDay > 12) hourOfDay - 12 else hourOfDay
+                                                    val timeStr = String.format(Locale.US, "%d:%02d %s", h, minute, ampm)
+                                                    snackbarHostState.showSnackbar("Reminder time set to $timeStr")
+                                                }
+                                            },
+                                            settings.reminderHour,
+                                            settings.reminderMinute,
+                                            false
+                                        ).show()
+                                    }
                             ) {
                                 Row(
                                     modifier = Modifier
@@ -247,7 +481,7 @@ fun NotificationsScreen(
                                             modifier = Modifier.size(20.dp)
                                         )
                                         Text(
-                                            text = "Scheduled Time",
+                                            text = "Scheduled Time (Tap to edit)",
                                             fontSize = 14.sp,
                                             fontWeight = FontWeight.Medium,
                                             color = MaterialTheme.colorScheme.onSurface
@@ -264,7 +498,7 @@ fun NotificationsScreen(
                                             settings.reminderHour > 12 -> settings.reminderHour - 12
                                             else -> settings.reminderHour
                                         }
-                                        val timeStr = String.format("%d:%02d %s", displayHour, settings.reminderMinute, ampm)
+                                        val timeStr = String.format(Locale.US, "%d:%02d %s", displayHour, settings.reminderMinute, ampm)
                                         Text(
                                             text = timeStr,
                                             fontSize = 13.sp,
@@ -288,7 +522,7 @@ fun NotificationsScreen(
                     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f), RoundedCornerShape(24.dp))
+                        .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f), RoundedCornerShape(24.dp))
                 ) {
                     Row(
                         modifier = Modifier
@@ -347,9 +581,13 @@ fun NotificationsScreen(
             item {
                 Button(
                     onClick = {
-                        onTestNotification()
-                        scope.launch {
-                            snackbarHostState.showSnackbar("Test notification sent!")
+                        if (!hasNotificationPermission && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        } else {
+                            onTestNotification()
+                            scope.launch {
+                                snackbarHostState.showSnackbar("📸 Test notification sent! Check your notification shade.")
+                            }
                         }
                     },
                     shape = RoundedCornerShape(20.dp),
@@ -359,15 +597,15 @@ fun NotificationsScreen(
                     ),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(50.dp)
+                        .height(52.dp)
                         .testTag("test_notification_button")
                 ) {
                     Icon(
                         imageVector = Icons.Default.Notifications,
                         contentDescription = null,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(20.dp)
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
                     Text(
                         text = "Send Test Notification Now",
                         fontSize = 15.sp,
@@ -376,10 +614,10 @@ fun NotificationsScreen(
                 }
             }
 
-            // Notification Activity Log / Inbox
+            // How Notifications Work Info
             item {
                 Text(
-                    text = "Recent Alerts & Prompts",
+                    text = "Notification Features",
                     fontSize = 17.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground
@@ -388,17 +626,25 @@ fun NotificationsScreen(
 
             item {
                 NotificationLogCard(
-                    title = "Daily Photo Reminder",
-                    message = "A gentle reminder to capture your mark for today.",
-                    time = "Scheduled"
+                    title = "Daily Camera Prompt",
+                    message = "Fires every day at your scheduled time. Tapping the notification takes you straight to the camera so you never miss a day.",
+                    time = "Daily"
                 )
             }
 
             item {
                 NotificationLogCard(
-                    title = "Visual Memories",
-                    message = "Every photo captured builds your personal visual timeline.",
-                    time = "Tip"
+                    title = "Quick Capture Action",
+                    message = "Includes a direct '📸 Snap Photo' button right inside the notification for one-tap photo taking.",
+                    time = "Action"
+                )
+            }
+
+            item {
+                NotificationLogCard(
+                    title = "Auto-Recovery on Restart",
+                    message = "Reminders are automatically re-registered if your phone reboots or the app updates.",
+                    time = "System"
                 )
             }
         }
@@ -416,7 +662,7 @@ private fun NotificationLogCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f), RoundedCornerShape(20.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f), RoundedCornerShape(20.dp))
     ) {
         Row(
             modifier = Modifier
@@ -464,7 +710,7 @@ private fun NotificationLogCard(
                 Text(
                     text = message,
                     fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
                     lineHeight = 18.sp
                 )
             }

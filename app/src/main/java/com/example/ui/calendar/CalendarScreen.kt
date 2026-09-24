@@ -4,6 +4,8 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -14,20 +16,20 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.CameraAlt
@@ -46,12 +48,20 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -65,15 +75,16 @@ import com.example.data.model.DailyPhoto
 import com.example.ui.JournalUiState
 import com.example.ui.components.DateActionSheet
 import com.example.ui.components.getMoodEmoji
+import com.example.ui.theme.Accent
+import com.example.ui.theme.AccentLight
 import com.example.ui.theme.AshGrey
 import com.example.ui.theme.Charcoal
 import com.example.ui.theme.Porcelain
-import com.example.ui.theme.SandyClay
-import com.example.ui.theme.SunlitClay
 import com.example.util.DateTimeUtils
 import java.io.File
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import kotlin.math.abs
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
@@ -129,168 +140,294 @@ fun CalendarScreen(
         photosInCurrentMonth.map { it.journalDate }.distinct().size
     }
 
+    var is3dMode by remember { mutableStateOf(true) }
+
     LazyColumn(
         contentPadding = PaddingValues(top = 16.dp, bottom = 96.dp, start = 16.dp, end = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
         modifier = modifier.fillMaxSize()
     ) {
-        // Month Navigation Header
+        // Month Navigation Header with Interactive 3D Calendar Hero & 3D Depth Toggle
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
-                    Text(
-                        text = month.format(DateTimeFormatter.ofPattern("MMMM yyyy")),
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    InteractiveCalendar3dWidget(
+                        sizeDp = 52,
+                        modifier = Modifier.padding(end = 12.dp)
                     )
-                    Text(
-                        text = "$daysWithPhotosInMonth of $daysInMonth days captured (${photosInCurrentMonth.size} moments)",
-                        fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        fontWeight = FontWeight.Medium
-                    )
+                    Column {
+                        Text(
+                            text = month.format(DateTimeFormatter.ofPattern("MMMM yyyy")),
+                            fontSize = 21.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                        Text(
+                            text = "$daysWithPhotosInMonth of $daysInMonth days captured",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                            fontWeight = FontWeight.Medium
+                        )
+                        Spacer(modifier = Modifier.height(5.dp))
+                        // 3D Progress pill track
+                        Box(
+                            modifier = Modifier
+                                .width(120.dp)
+                                .height(5.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(AshGrey.copy(alpha = 0.35f))
+                        ) {
+                            val progressFraction = if (daysInMonth > 0) {
+                                (daysWithPhotosInMonth.toFloat() / daysInMonth.toFloat()).coerceIn(0f, 1f)
+                            } else 0f
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .fillMaxWidth(fraction = progressFraction)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(
+                                        Brush.horizontalGradient(
+                                            listOf(Accent, AccentLight)
+                                        )
+                                    )
+                            )
+                        }
+                    }
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // 3D Depth Mode Toggle Button
                     Surface(
                         shape = RoundedCornerShape(12.dp),
-                        color = SandyClay,
+                        color = if (is3dMode) Accent.copy(alpha = 0.16f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            if (is3dMode) Accent else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                        ),
                         modifier = Modifier
-                            .padding(end = 8.dp)
+                            .clickable { is3dMode = !is3dMode }
+                            .testTag("toggle_3d_mode_button")
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = if (is3dMode) "✦ 3D" else "3D Off",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (is3dMode) Accent else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    // Jump to Today
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = Accent,
+                        modifier = Modifier
                             .clickable(onClick = onJumpToToday)
                             .testTag("jump_to_today_button")
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp)
+                            modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Today,
                                 contentDescription = "Jump to Today",
-                                tint = Charcoal,
+                                tint = Color.White,
                                 modifier = Modifier.size(13.dp)
                             )
-                            Spacer(modifier = Modifier.width(3.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
                             Text(
                                 text = "Today",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Charcoal
+                                color = Color.White
                             )
                         }
-                    }
-
-                    IconButton(
-                        onClick = { onNavigateMonth(-1) },
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(CircleShape)
-                            .background(AshGrey.copy(alpha = 0.25f))
-                            .testTag("prev_month_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Previous Month",
-                            tint = Charcoal,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.width(6.dp))
-
-                    IconButton(
-                        onClick = { onNavigateMonth(1) },
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(CircleShape)
-                            .background(AshGrey.copy(alpha = 0.25f))
-                            .testTag("next_month_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = "Next Month",
-                            tint = Charcoal,
-                            modifier = Modifier.size(18.dp)
-                        )
                     }
                 }
             }
         }
 
-        // Calendar Grid Card
+        // Calendar Grid Card with swipe gesture & 3D perspective slab
         item {
-            Card(
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, AshGrey.copy(alpha = 0.35f), RoundedCornerShape(20.dp))
-                    .testTag("calendar_grid_card")
-            ) {
-                Column(modifier = Modifier.padding(10.dp)) {
-                    // Day of week headers
-                    val dayNames = listOf("S", "M", "T", "W", "T", "F", "S")
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceAround
-                    ) {
-                        dayNames.forEach { name ->
-                            Text(
-                                text = name,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = AshGrey,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.weight(1f)
+            var swipeDragOffset by remember { mutableFloatStateOf(0f) }
+
+            val targetRotX = if (is3dMode) 6f else 0f
+            val animatedRotX by animateFloatAsState(
+                targetValue = targetRotX,
+                animationSpec = spring(dampingRatio = 0.82f, stiffness = 260f),
+                label = "calendar_rot_x"
+            )
+            val targetBaseRotY = if (is3dMode) -3f else 0f
+            val animatedBaseRotY by animateFloatAsState(
+                targetValue = targetBaseRotY,
+                animationSpec = spring(dampingRatio = 0.82f, stiffness = 260f),
+                label = "calendar_base_rot_y"
+            )
+
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Card(
+                    shape = RoundedCornerShape(22.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = if (is3dMode) 6.dp else 1.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer {
+                            val swipeRotY = (swipeDragOffset * 0.055f).coerceIn(-15f, 15f)
+                            val totalRotY = animatedBaseRotY + swipeRotY
+                            val swipeTranslationX = (swipeDragOffset * 0.2f).coerceIn(-45f, 45f)
+
+                            rotationX = animatedRotX
+                            rotationY = totalRotY
+                            translationX = swipeTranslationX
+                            cameraDistance = 16f * density
+                            shadowElevation = (if (is3dMode) 8.dp else 1.dp).toPx()
+                            shape = RoundedCornerShape(22.dp)
+                        }
+                        .border(
+                            1.dp,
+                            if (is3dMode) Accent.copy(alpha = 0.28f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                            RoundedCornerShape(22.dp)
+                        )
+                        .drawWithContent {
+                            drawContent()
+                            if (is3dMode) {
+                                // 3D top specular sheen
+                                drawLine(
+                                    color = Color.White.copy(alpha = 0.38f),
+                                    start = Offset(24f, 1.5f),
+                                    end = Offset(size.width - 24f, 1.5f),
+                                    strokeWidth = 2.5f
+                                )
+                                // 3D bottom bevel drop shadow
+                                drawLine(
+                                    color = Color.Black.copy(alpha = 0.12f),
+                                    start = Offset(24f, size.height - 1.5f),
+                                    end = Offset(size.width - 24f, size.height - 1.5f),
+                                    strokeWidth = 3.5f
+                                )
+                            }
+                        }
+                        .pointerInput(month) {
+                            detectHorizontalDragGestures(
+                                onDragStart = { swipeDragOffset = 0f },
+                                onDragEnd = {
+                                    if (swipeDragOffset < -45f) {
+                                        onNavigateMonth(1) // Swipe left to next month
+                                    } else if (swipeDragOffset > 45f) {
+                                        onNavigateMonth(-1) // Swipe right to previous month
+                                    }
+                                    swipeDragOffset = 0f
+                                },
+                                onDragCancel = { swipeDragOffset = 0f },
+                                onHorizontalDrag = { change, dragAmount ->
+                                    change.consume()
+                                    swipeDragOffset += dragAmount
+                                }
                             )
                         }
-                    }
-
-                    // Month Rows
-                    for (row in 0 until rows) {
+                        .testTag("calendar_grid_card")
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        // Day of week headers
+                        val dayNames = listOf("S", "M", "T", "W", "T", "F", "S")
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 3.dp),
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                .padding(bottom = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceAround
                         ) {
-                            for (col in 0..6) {
-                                val cellIndex = row * 7 + col
-                                val dayNumber = cellIndex - firstDayOffset + 1
+                            dayNames.forEach { name ->
+                                Text(
+                                    text = name,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = AshGrey,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
 
-                                if (dayNumber in 1..daysInMonth) {
-                                    val cellDate = month.atDay(dayNumber)
-                                    val dateStr = DateTimeUtils.toIsoDate(cellDate)
-                                    val photos = photosByDate[dateStr] ?: emptyList()
-                                    val isToday = cellDate == today
-                                    val isFuture = cellDate.isAfter(today)
-                                    val isSelected = cellDate == selectedDate
+                        // Month Rows
+                        for (row in 0 until rows) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 3.dp),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                for (col in 0..6) {
+                                    val cellIndex = row * 7 + col
+                                    val dayNumber = cellIndex - firstDayOffset + 1
 
-                                    CalendarDayCell(
-                                        dayNumber = dayNumber,
-                                        photos = photos,
-                                        isToday = isToday,
-                                        isFuture = isFuture,
-                                        isSelected = isSelected,
-                                        onClick = { onSelectDate(cellDate) },
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                } else {
-                                    Box(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .aspectRatio(0.85f)
-                                    )
+                                    if (dayNumber in 1..daysInMonth) {
+                                        val cellDate = month.atDay(dayNumber)
+                                        val dateStr = DateTimeUtils.toIsoDate(cellDate)
+                                        val photos = photosByDate[dateStr] ?: emptyList()
+                                        val isToday = cellDate == today
+                                        val isFuture = cellDate.isAfter(today)
+                                        val isSelected = cellDate == selectedDate
+
+                                        CalendarDayCell(
+                                            dayNumber = dayNumber,
+                                            photos = photos,
+                                            isToday = isToday,
+                                            isFuture = isFuture,
+                                            isSelected = isSelected,
+                                            is3dMode = is3dMode,
+                                            onClick = { onSelectDate(cellDate) },
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    } else {
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .aspectRatio(0.85f)
+                                        )
+                                    }
                                 }
                             }
+                        }
+                    }
+                }
+
+                // Subtle swipe helper indicators when user starts dragging
+                if (abs(swipeDragOffset) > 12f) {
+                    val isNext = swipeDragOffset < 0
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 6.dp, start = 8.dp, end = 8.dp),
+                        horizontalArrangement = if (isNext) Arrangement.End else Arrangement.Start,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Accent.copy(alpha = 0.15f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Accent.copy(alpha = 0.35f))
+                        ) {
+                            Text(
+                                text = if (isNext) "Next Month ›" else "‹ Previous Month",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Accent,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
                         }
                     }
                 }
@@ -302,10 +439,28 @@ fun CalendarScreen(
             Card(
                 shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = if (is3dMode) 4.dp else 2.dp),
                 modifier = Modifier
                     .fillMaxWidth()
+                    .graphicsLayer {
+                        if (is3dMode) {
+                            shadowElevation = 5.dp.toPx()
+                            shape = RoundedCornerShape(20.dp)
+                        }
+                    }
                     .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
+                    .drawWithContent {
+                        drawContent()
+                        if (is3dMode) {
+                            // Top 3D highlight edge
+                            drawLine(
+                                color = Color.White.copy(alpha = 0.35f),
+                                start = Offset(20f, 1.5f),
+                                end = Offset(size.width - 20f, 1.5f),
+                                strokeWidth = 2f
+                            )
+                        }
+                    }
                     .testTag("selected_day_card")
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
@@ -327,13 +482,13 @@ fun CalendarScreen(
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Surface(
                                         shape = RoundedCornerShape(8.dp),
-                                        color = SandyClay
+                                        color = Accent
                                     ) {
                                         Text(
                                             text = "Today",
                                             fontSize = 10.sp,
                                             fontWeight = FontWeight.Bold,
-                                            color = Charcoal,
+                                            color = Color.White,
                                             modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
                                         )
                                     }
@@ -414,7 +569,7 @@ fun CalendarScreen(
                                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                items(selectedPhotos) { photo ->
+                                items(selectedPhotos, key = { it.id }) { photo ->
                                     Box(
                                         modifier = Modifier
                                             .size(width = 86.dp, height = 100.dp)
@@ -453,7 +608,7 @@ fun CalendarScreen(
                                         if (!photo.mood.isNullOrEmpty()) {
                                             Surface(
                                                 shape = CircleShape,
-                                                color = SandyClay,
+                                                color = Accent,
                                                 modifier = Modifier
                                                     .align(Alignment.TopEnd)
                                                     .padding(4.dp)
@@ -507,8 +662,8 @@ fun CalendarScreen(
                                     },
                                     shape = RoundedCornerShape(12.dp),
                                     colors = ButtonDefaults.buttonColors(
-                                        containerColor = SunlitClay,
-                                        contentColor = Charcoal
+                                        containerColor = Accent,
+                                        contentColor = Color.White
                                     ),
                                     modifier = Modifier
                                         .weight(1f)
@@ -556,8 +711,8 @@ fun CalendarScreen(
                                     },
                                     shape = RoundedCornerShape(12.dp),
                                     colors = ButtonDefaults.buttonColors(
-                                        containerColor = SandyClay,
-                                        contentColor = Charcoal
+                                        containerColor = Accent,
+                                        contentColor = Color.White
                                     ),
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -605,8 +760,8 @@ fun CalendarScreen(
                                         },
                                         shape = RoundedCornerShape(12.dp),
                                         colors = ButtonDefaults.buttonColors(
-                                            containerColor = SandyClay,
-                                            contentColor = Charcoal
+                                            containerColor = Accent,
+                                            contentColor = Color.White
                                         ),
                                         modifier = Modifier
                                             .weight(1f)
@@ -659,41 +814,78 @@ private fun CalendarDayCell(
     isToday: Boolean,
     isFuture: Boolean,
     isSelected: Boolean,
+    is3dMode: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val borderColor = when {
-        isSelected -> SunlitClay
-        isToday -> SandyClay
-        else -> AshGrey.copy(alpha = 0.25f)
+        isSelected -> Accent
+        isToday -> Accent
+        else -> if (is3dMode) MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)
     }
 
     val borderWidth = when {
-        isSelected -> 2.dp
+        isSelected -> 2.5.dp
         isToday -> 2.dp
-        else -> 0.5.dp
+        else -> 0.75.dp
     }
 
     val hasPhotos = photos.isNotEmpty()
 
     val cellBackground = when {
-        isFuture -> AshGrey.copy(alpha = 0.12f)
+        isFuture -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
         hasPhotos -> Color.Black.copy(alpha = 0.05f)
-        isToday -> SunlitClay.copy(alpha = 0.22f)
-        else -> AshGrey.copy(alpha = 0.16f)
+        isToday -> Accent.copy(alpha = 0.16f)
+        else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+    }
+
+    val translationYOffset = if (isSelected && is3dMode) (-2f).dp else 0.dp
+    val tileElevation = when {
+        isSelected -> 6.dp
+        hasPhotos && is3dMode -> 3.5.dp
+        isToday && is3dMode -> 3.dp
+        is3dMode -> 1.5.dp
+        else -> 0.dp
     }
 
     Box(
         modifier = modifier
             .aspectRatio(0.85f)
+            .graphicsLayer {
+                translationY = translationYOffset.toPx()
+                if (is3dMode) {
+                    shadowElevation = tileElevation.toPx()
+                    shape = RoundedCornerShape(10.dp)
+                }
+            }
             .clip(RoundedCornerShape(10.dp))
             .background(cellBackground)
             .border(borderWidth, borderColor, RoundedCornerShape(10.dp))
+            .drawWithContent {
+                drawContent()
+                if (is3dMode && !isFuture) {
+                    // Top 3D highlight bevel
+                    drawLine(
+                        color = Color.White.copy(alpha = if (isSelected) 0.45f else 0.25f),
+                        start = Offset(6f, 1f),
+                        end = Offset(size.width - 6f, 1f),
+                        strokeWidth = 2f
+                    )
+                    // Bottom 3D depth shadow bevel
+                    val bottomBevelColor = if (isSelected) Accent.copy(alpha = 0.6f) else Color.Black.copy(alpha = 0.18f)
+                    drawLine(
+                        color = bottomBevelColor,
+                        start = Offset(6f, size.height - 1f),
+                        end = Offset(size.width - 6f, size.height - 1f),
+                        strokeWidth = if (isSelected) 3f else 2f
+                    )
+                }
+            }
             .clickable(onClick = onClick)
             .testTag("calendar_day_$dayNumber")
     ) {
         when {
-            // FUTURE STATE: Muted Ash Grey, lock icon
+            // FUTURE STATE: Muted lock icon
             isFuture -> {
                 Column(
                     modifier = Modifier
@@ -706,13 +898,13 @@ private fun CalendarDayCell(
                         text = "$dayNumber",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Medium,
-                        color = AshGrey.copy(alpha = 0.7f)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
                     )
 
                     Icon(
                         imageVector = Icons.Default.Lock,
                         contentDescription = null,
-                        tint = AshGrey.copy(alpha = 0.6f),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
                         modifier = Modifier.size(12.dp)
                     )
                 }
@@ -776,11 +968,11 @@ private fun CalendarDayCell(
                         .padding(4.dp)
                 )
 
-                // Photos count pill if multiple (Sandy Clay)
+                // Photos count pill if multiple (Accent #DA7756)
                 if (photos.size > 1) {
                     Surface(
                         shape = RoundedCornerShape(6.dp),
-                        color = SandyClay,
+                        color = Accent,
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
                             .padding(2.dp)
@@ -789,14 +981,14 @@ private fun CalendarDayCell(
                             text = "${photos.size}",
                             fontSize = 9.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Charcoal,
+                            color = Color.White,
                             modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
                         )
                     }
                 }
             }
 
-            // TODAY WITH NO PHOTOS: Sunlit Clay background + Sandy Clay dot + Charcoal text
+            // TODAY WITH NO PHOTOS: Accent border + Accent dot + onSurface text
             isToday -> {
                 Column(
                     modifier = Modifier
@@ -814,20 +1006,20 @@ private fun CalendarDayCell(
                             text = "$dayNumber",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Charcoal
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         Box(
                             modifier = Modifier
                                 .size(6.dp)
                                 .clip(CircleShape)
-                                .background(SandyClay)
+                                .background(Accent)
                         )
                     }
 
                     Icon(
                         imageVector = Icons.Default.CameraAlt,
                         contentDescription = "Capture today",
-                        tint = Charcoal,
+                        tint = Accent,
                         modifier = Modifier.size(16.dp)
                     )
 
@@ -835,12 +1027,12 @@ private fun CalendarDayCell(
                         text = "Today",
                         fontSize = 8.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Charcoal
+                        color = Accent
                     )
                 }
             }
 
-            // PAST DATE WITH NO PHOTOS: Subtle Ash Grey with Charcoal number and Ash Grey add icon
+            // PAST DATE WITH NO PHOTOS: onSurface number and subtle add icon
             else -> {
                 Column(
                     modifier = Modifier
@@ -853,14 +1045,14 @@ private fun CalendarDayCell(
                         text = "$dayNumber",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Medium,
-                        color = Charcoal.copy(alpha = 0.7f),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
                         modifier = Modifier.align(Alignment.Start)
                     )
 
                     Icon(
                         imageVector = Icons.Default.Add,
                         contentDescription = "Add memory",
-                        tint = AshGrey,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
                         modifier = Modifier.size(14.dp)
                     )
 

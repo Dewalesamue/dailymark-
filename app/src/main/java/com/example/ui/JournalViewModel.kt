@@ -134,6 +134,17 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
     private val _activeDateActionSheet = MutableStateFlow<LocalDate?>(null)
     val activeDateActionSheet: StateFlow<LocalDate?> = _activeDateActionSheet.asStateFlow()
 
+    private val _showGoogleOAuthDialog = MutableStateFlow(false)
+    val showGoogleOAuthDialog: StateFlow<Boolean> = _showGoogleOAuthDialog.asStateFlow()
+
+    fun openGoogleOAuthDialog() {
+        _showGoogleOAuthDialog.value = true
+    }
+
+    fun closeGoogleOAuthDialog() {
+        _showGoogleOAuthDialog.value = false
+    }
+
     init {
         val today = getTodayDate()
         _selectedDate.value = today
@@ -168,6 +179,9 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
             _currentScreen.value = Screen.Auth
         }
         ReminderManager.createNotificationChannel(application)
+        if (s.reminderEnabled) {
+            ReminderManager.scheduleDailyReminder(application, s.reminderHour, s.reminderMinute)
+        }
 
         // Keep SupabaseService reactive to settings changes
         viewModelScope.launch {
@@ -626,7 +640,7 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
                 return@launch
             }
             _isSaving.value = true
-            _saveMessage.value = "Creating Supabase account for $trimmedName..."
+            _saveMessage.value = "Creating your journal account..."
 
             val result = supabaseService.signUpWithEmail(trimmedEmail, password, trimmedName)
 
@@ -678,7 +692,7 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
                 return@launch
             }
             _isSaving.value = true
-            _saveMessage.value = "Signing in to Supabase..."
+            _saveMessage.value = "Signing in to Daymark..."
 
             val result = supabaseService.signInWithEmail(trimmedEmail, password)
 
@@ -749,7 +763,7 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
     ) {
         viewModelScope.launch {
             _isSaving.value = true
-            _saveMessage.value = "Authenticating with Supabase..."
+            _saveMessage.value = "Connecting your Google account..."
             val result = supabaseService.signInWithGoogle(
                 idToken = idToken,
                 email = email,
@@ -768,15 +782,13 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
                 )
                 settingsRepository.setOnboardingCompleted(true)
 
-                // Section E: Migrate existing local data to newly authenticated Supabase account
+                // Migrate existing local data to newly authenticated account
                 _saveMessage.value = "Migrating local memories..."
                 photoRepository.migrateLocalDataToUser(authUser.id)
 
-                // Sync cloud memories for this authenticated user
+                // Restore cloud memories & days
                 _saveMessage.value = "Restoring cloud memories..."
                 photoRepository.syncFromCloud(authUser.id)
-
-                // Sync custom day titles
                 val daysResult = supabaseService.fetchDays(authUser.id)
                 if (daysResult.isSuccess) {
                     daysResult.getOrNull()?.forEach { (date, title) ->
@@ -784,13 +796,15 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
                     }
                 }
 
-                _saveMessage.value = "Signed in as ${authUser.displayName}"
+                _saveMessage.value = "Welcome back, ${authUser.displayName}!"
                 _currentScreen.value = Screen.MainTabs
+                _isSaving.value = false
                 HapticUtils.performHaptic(getApplication(), settings.value.hapticsEnabled, 30)
                 onComplete(true, null)
             } else {
                 val error = result.exceptionOrNull()?.message ?: "Sign in failed"
                 _saveMessage.value = error
+                _isSaving.value = false
                 onComplete(false, error)
             }
             _isSaving.value = false
@@ -810,17 +824,24 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
             _isSaving.value = true
             _saveMessage.value = "Signing in with Google..."
 
-            val credResult = CredentialManagerHelper.getGoogleIdToken(context)
+            val credResult = CredentialManagerHelper.getGoogleIdToken(
+                context,
+                com.example.data.supabase.SupabaseConfig.GOOGLE_WEB_CLIENT_ID
+            )
             if (credResult.isFailure) {
-                val error = credResult.exceptionOrNull()?.message ?: "Google sign-in was cancelled or failed"
-                _saveMessage.value = error
+                val exception = credResult.exceptionOrNull()
+                val errorMsg = exception?.message ?: ""
+                android.util.Log.d("JournalViewModel", "Credential Manager returned: $errorMsg. Launching in-app Google login.")
+
                 _isSaving.value = false
-                onComplete(false, error)
+                _saveMessage.value = null
+                openGoogleOAuthDialog()
+                onComplete(false, errorMsg)
                 return@launch
             }
 
             val googleData = credResult.getOrThrow()
-            _saveMessage.value = "Authenticating with Supabase..."
+            _saveMessage.value = "Connecting your Google account..."
 
             val result = supabaseService.signInWithGoogle(
                 idToken = googleData.idToken,
@@ -870,8 +891,28 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
     }
 
     /**
+     * Launches Supabase Web Google OAuth flow in the device browser or Custom Tab.
+     * Completes via the deep link redirect onephotoday://auth-callback.
+     */
+    fun startGoogleWebOAuth(context: Context): Boolean {
+        return try {
+            val oauthUrl = supabaseService.getGoogleOAuthUrl()
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(oauthUrl)).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+            _saveMessage.value = "Opening Google Sign-in in browser..."
+            true
+        } catch (e: Exception) {
+            android.util.Log.e("JournalViewModel", "Failed to launch browser for Google OAuth: ${e.message}", e)
+            _saveMessage.value = "Failed to launch browser: ${e.message}"
+            false
+        }
+    }
+
+    /**
      * Google Sign-in entry point for UI.
-     * Uses native Credential Manager flow directly (no browser, no web redirect).
+     * Tries native Credential Manager first; seamlessly falls back to browser OAuth if unavailable.
      */
     fun startGoogleOAuth(context: Context) {
         signInWithNativeGoogle(context)
@@ -884,8 +925,9 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
      */
     fun handleOAuthCallback(uri: Uri) {
         viewModelScope.launch {
+            closeGoogleOAuthDialog()
             _isSaving.value = true
-            _saveMessage.value = "Connecting Supabase session..."
+            _saveMessage.value = "Connecting your journal..."
 
             // Parse token from fragment (#access_token=... or query ?access_token=...)
             val fragment = uri.fragment ?: ""
@@ -1004,6 +1046,11 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
     fun updateReminder(enabled: Boolean, hour: Int, minute: Int) {
         settingsRepository.setReminderEnabled(enabled)
         settingsRepository.setReminderTime(hour, minute)
+        if (enabled) {
+            ReminderManager.scheduleDailyReminder(getApplication(), hour, minute)
+        } else {
+            ReminderManager.cancelReminder(getApplication())
+        }
     }
 
     fun updateHaptics(enabled: Boolean) {
@@ -1015,9 +1062,14 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
         supabaseService.updateConfig(url, key, settings.value.accessToken)
     }
 
-    fun testReminderNotification() {
-        ReminderManager.showNotification(getApplication())
+    fun testReminderNotification(): Boolean {
+        val posted = ReminderManager.showNotification(
+            getApplication(),
+            title = "Time for today's photo! 📸",
+            message = "Capture today's memory before the day ends. Tap to open the camera."
+        )
         HapticUtils.performHaptic(getApplication(), settings.value.hapticsEnabled, 25)
+        return posted
     }
 
     fun clearSaveMessage() {

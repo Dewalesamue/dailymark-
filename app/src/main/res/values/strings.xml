@@ -3,5 +3,5 @@
     <string name="app_tagline">Keep a mark of every day.</string>
     <!-- Web Client ID for Google Credential Manager (server_client_id) -->
     <!-- Matches the Google OAuth Client ID (type: Web application) configured in Supabase -->
-    <string name="default_web_client_id">268456457803-webclient.apps.googleusercontent.com</string>
+    <string name="default_web_client_id">251928493452-m3b6ilhe4o4f05df11v3sgeccninjt5j.apps.googleusercontent.com</string>
 </resources>

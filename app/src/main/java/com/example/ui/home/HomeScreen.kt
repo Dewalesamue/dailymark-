@@ -7,6 +7,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -72,6 +73,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
+import com.example.R
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -85,11 +88,10 @@ import androidx.compose.ui.text.font.FontStyle
 import com.example.data.model.DailyPhoto
 import com.example.ui.JournalUiState
 import com.example.ui.components.getMoodEmoji
+import com.example.ui.theme.Accent
 import com.example.ui.theme.AshGrey
 import com.example.ui.theme.Charcoal
 import com.example.ui.theme.Porcelain
-import com.example.ui.theme.SandyClay
-import com.example.ui.theme.SunlitClay
 import com.example.util.DateTimeUtils
 import java.io.File
 import java.time.LocalDate
@@ -149,6 +151,10 @@ fun HomeScreen(
     var selectedCategoryChip by remember { mutableStateOf("• Today's Moments") }
     val categories = listOf("• Today's Moments", "Memories", "Calendar")
 
+    val recentPhotos = remember(uiState.photos) {
+        uiState.photos.take(15)
+    }
+
     LazyColumn(
         contentPadding = PaddingValues(top = 16.dp, bottom = 96.dp, start = 20.dp, end = 20.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp),
@@ -175,30 +181,31 @@ fun HomeScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    // Circular Charcoal bell button with Porcelain icon & Sandy Clay notification dot
+                    // 3D Glowing Clay Notification Bell button
                     Box(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier
                             .size(42.dp)
                             .clip(CircleShape)
-                            .background(Charcoal)
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f))
+                            .border(1.dp, AshGrey.copy(alpha = 0.25f), CircleShape)
                             .clickable(onClick = onOpenNotifications)
                             .testTag("home_notification_bell")
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Notifications,
+                        Image(
+                            painter = painterResource(id = R.drawable.img_3d_bell_notification_1790255229641),
                             contentDescription = "Notifications",
-                            tint = Porcelain,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(28.dp),
+                            contentScale = ContentScale.Fit
                         )
-                        // Sandy Clay accent dot
+                        // Accent orange dot
                         Box(
                             modifier = Modifier
                                 .size(9.dp)
                                 .align(Alignment.TopEnd)
                                 .padding(top = 2.dp, end = 2.dp)
                                 .clip(CircleShape)
-                                .background(SandyClay)
+                                .background(Accent)
                         )
                     }
 
@@ -226,13 +233,13 @@ fun HomeScreen(
                                 contentAlignment = Alignment.Center,
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .background(SandyClay)
+                                    .background(Accent)
                             ) {
                                 Text(
                                     text = userName.take(1).uppercase(),
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 16.sp,
-                                    color = Charcoal
+                                    color = Color.White
                                 )
                             }
                         }
@@ -241,29 +248,21 @@ fun HomeScreen(
             }
         }
 
-        // 2. Category Chips Row: Each chip uniquely styled with palette colors
+        // 2. Category Chips Row: Single Accent #DA7756 for selected state, neutral Ash Grey base
         item {
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                items(categories) { cat ->
+                items(categories, key = { it }) { cat ->
                     val isSelected = selectedCategoryChip == cat
-                    val (chipBg, chipBorder, chipText) = when (cat) {
-                        "• Today's Moments" -> Triple(
-                            if (isSelected) SunlitClay else SunlitClay.copy(alpha = 0.2f),
-                            SunlitClay,
-                            Charcoal
-                        )
-                        "Memories" -> Triple(
-                            if (isSelected) AshGrey else AshGrey.copy(alpha = 0.25f),
-                            AshGrey,
-                            Charcoal
-                        )
-                        else -> Triple(
-                            if (isSelected) SandyClay else SandyClay.copy(alpha = 0.25f),
-                            SandyClay,
-                            Charcoal
+                    val (chipBg, chipBorder, chipText) = if (isSelected) {
+                        Triple(Accent, Accent, Color.White)
+                    } else {
+                        Triple(
+                            AshGrey.copy(alpha = 0.15f),
+                            AshGrey.copy(alpha = 0.35f),
+                            MaterialTheme.colorScheme.onSurface
                         )
                     }
 
@@ -354,7 +353,7 @@ fun HomeScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        items(uiState.photos.take(15)) { photo ->
+                        items(recentPhotos, key = { it.id }) { photo ->
                             RecentPhotoThumbnailCard(
                                 photo = photo,
                                 onClick = { onOpenPhotoDetail(photo.id) }
@@ -384,7 +383,7 @@ private fun TerracottaHeroCard(
 
     Card(
         shape = RoundedCornerShape(28.dp),
-        colors = CardDefaults.cardColors(containerColor = SunlitClay),
+        colors = CardDefaults.cardColors(containerColor = Accent),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         modifier = modifier
             .fillMaxWidth()
@@ -415,7 +414,7 @@ private fun TerracottaHeroCard(
                         Icon(
                             imageVector = if (hasPhotos) Icons.Default.Collections else Icons.Default.CameraAlt,
                             contentDescription = "Camera",
-                            tint = Charcoal,
+                            tint = Accent,
                             modifier = Modifier.size(24.dp)
                         )
                     }
@@ -425,12 +424,12 @@ private fun TerracottaHeroCard(
                             text = displayTitle,
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Charcoal
+                            color = Color.White
                         )
                         Text(
                             text = if (hasPhotos) "Tap any moment to view full size" else "Keep a mark of every day",
                             fontSize = 12.sp,
-                            color = Charcoal.copy(alpha = 0.82f)
+                            color = Color.White.copy(alpha = 0.85f)
                         )
                     }
                 }
@@ -446,41 +445,41 @@ private fun TerracottaHeroCard(
                     "Capture a photo to remember today. Your moments are stored securely on your device."
                 },
                 fontSize = 13.sp,
-                color = Charcoal.copy(alpha = 0.88f),
+                color = Color.White.copy(alpha = 0.9f),
                 lineHeight = 18.sp
             )
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Badges row: Sandy Clay & Ash Grey pills
+            // Badges row: Translucent porcelain pills on Accent canvas
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Surface(
                     shape = RoundedCornerShape(14.dp),
-                    color = SandyClay,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Charcoal.copy(alpha = 0.18f))
+                    color = Porcelain.copy(alpha = 0.2f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.35f))
                 ) {
                     Text(
                         text = "Today",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Charcoal,
+                        color = Color.White,
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                     )
                 }
 
                 Surface(
                     shape = RoundedCornerShape(14.dp),
-                    color = AshGrey,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Charcoal.copy(alpha = 0.18f))
+                    color = Porcelain.copy(alpha = 0.2f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.35f))
                 ) {
                     Text(
                         text = if (todayPhotos.size == 1) "1 Moment" else "${todayPhotos.size} Moments",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Charcoal,
+                        color = Color.White,
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                     )
                 }
@@ -593,9 +592,10 @@ private fun TerracottaHeroCard(
                         onClick = onPickFromGallery,
                         shape = RoundedCornerShape(20.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = SandyClay,
-                            contentColor = Charcoal
+                            containerColor = Porcelain.copy(alpha = 0.22f),
+                            contentColor = Color.White
                         ),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.4f)),
                         modifier = Modifier
                             .weight(1f)
                             .height(44.dp)
@@ -716,16 +716,16 @@ private fun DailyMindsetCard(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Badges Row: Sandy Clay (Streak) + Sunlit Clay (Total Moments)
+            // Badges Row: Single Accent #DA7756 (Streak & Total Moments)
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Streak Pill in Sandy Clay
+                // Streak Pill in Accent
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = SandyClay,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Charcoal.copy(alpha = 0.18f))
+                    color = Accent,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -734,7 +734,7 @@ private fun DailyMindsetCard(
                         Icon(
                             imageVector = Icons.Default.LocalFireDepartment,
                             contentDescription = null,
-                            tint = Charcoal,
+                            tint = Color.White,
                             modifier = Modifier.size(14.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
@@ -742,16 +742,16 @@ private fun DailyMindsetCard(
                             text = if (streakDays > 0) "$streakDays Day Streak" else "Start Streak",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Charcoal
+                            color = Color.White
                         )
                     }
                 }
 
-                // Total Moments Pill in Sunlit Clay
+                // Total Moments Pill in Accent
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = SunlitClay,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Charcoal.copy(alpha = 0.18f))
+                    color = Accent,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -760,7 +760,7 @@ private fun DailyMindsetCard(
                         Icon(
                             imageVector = Icons.Default.Collections,
                             contentDescription = null,
-                            tint = Charcoal,
+                            tint = Color.White,
                             modifier = Modifier.size(14.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
@@ -768,7 +768,7 @@ private fun DailyMindsetCard(
                             text = "$totalMoments Moments",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Charcoal
+                            color = Color.White
                         )
                     }
                 }

@@ -1,5 +1,10 @@
 package com.example.ui.main
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -28,16 +33,24 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.R
 import com.example.ui.NavigationTab
+import com.example.ui.theme.Accent
 import com.example.ui.theme.AshGrey
 import com.example.ui.theme.Charcoal
 import com.example.ui.theme.Porcelain
-import com.example.ui.theme.SandyClay
-import com.example.ui.theme.SunlitClay
 
 /**
  * Main screen layout featuring a BottomNavigation bar and a placeholder/pluggable content area
@@ -54,9 +67,9 @@ fun MainScreenLayout(
 ) {
     val isDarkNav = MaterialTheme.colorScheme.background.red < 0.5f
     val navItemColors = NavigationBarItemDefaults.colors(
-        selectedIconColor = if (isDarkNav) Porcelain else Charcoal,
-        selectedTextColor = if (isDarkNav) Porcelain else Charcoal,
-        indicatorColor = if (isDarkNav) SandyClay.copy(alpha = 0.45f) else SunlitClay.copy(alpha = 0.45f),
+        selectedIconColor = Accent,
+        selectedTextColor = Accent,
+        indicatorColor = Accent.copy(alpha = 0.18f),
         unselectedIconColor = if (isDarkNav) AshGrey else Charcoal.copy(alpha = 0.55f),
         unselectedTextColor = if (isDarkNav) AshGrey else Charcoal.copy(alpha = 0.65f)
     )
@@ -77,10 +90,11 @@ fun MainScreenLayout(
                     selected = selectedTab == NavigationTab.HOME,
                     onClick = { onTabSelected(NavigationTab.HOME) },
                     icon = {
-                        Icon(
-                            imageVector = if (selectedTab == NavigationTab.HOME)
-                                Icons.Default.Home else Icons.Outlined.Home,
-                            contentDescription = "Home"
+                        Nav3DIcon(
+                            drawableRes = R.drawable.img_3d_nav_home_1790179777958,
+                            fallbackVector = if (selectedTab == NavigationTab.HOME) Icons.Default.Home else Icons.Outlined.Home,
+                            contentDescription = "Home",
+                            isSelected = selectedTab == NavigationTab.HOME
                         )
                     },
                     label = { Text("Home", fontSize = 11.sp) },
@@ -92,10 +106,11 @@ fun MainScreenLayout(
                     selected = selectedTab == NavigationTab.CALENDAR,
                     onClick = { onTabSelected(NavigationTab.CALENDAR) },
                     icon = {
-                        Icon(
-                            imageVector = if (selectedTab == NavigationTab.CALENDAR)
-                                Icons.Default.CalendarMonth else Icons.Outlined.CalendarMonth,
-                            contentDescription = "Calendar"
+                        Nav3DIcon(
+                            drawableRes = R.drawable.img_3d_calendar_1790178917428,
+                            fallbackVector = if (selectedTab == NavigationTab.CALENDAR) Icons.Default.CalendarMonth else Icons.Outlined.CalendarMonth,
+                            contentDescription = "Calendar",
+                            isSelected = selectedTab == NavigationTab.CALENDAR
                         )
                     },
                     label = { Text("Calendar", fontSize = 11.sp) },
@@ -107,10 +122,11 @@ fun MainScreenLayout(
                     selected = selectedTab == NavigationTab.MEMORIES,
                     onClick = { onTabSelected(NavigationTab.MEMORIES) },
                     icon = {
-                        Icon(
-                            imageVector = if (selectedTab == NavigationTab.MEMORIES)
-                                Icons.Default.PhotoLibrary else Icons.Outlined.PhotoLibrary,
-                            contentDescription = "Memories"
+                        Nav3DIcon(
+                            drawableRes = R.drawable.img_3d_nav_memories_1790179789508,
+                            fallbackVector = if (selectedTab == NavigationTab.MEMORIES) Icons.Default.PhotoLibrary else Icons.Outlined.PhotoLibrary,
+                            contentDescription = "Memories",
+                            isSelected = selectedTab == NavigationTab.MEMORIES
                         )
                     },
                     label = { Text("Memories", fontSize = 11.sp) },
@@ -122,10 +138,11 @@ fun MainScreenLayout(
                     selected = selectedTab == NavigationTab.PROFILE,
                     onClick = { onTabSelected(NavigationTab.PROFILE) },
                     icon = {
-                        Icon(
-                            imageVector = if (selectedTab == NavigationTab.PROFILE)
-                                Icons.Default.Person else Icons.Outlined.Person,
-                            contentDescription = "Profile"
+                        Nav3DIcon(
+                            drawableRes = R.drawable.img_3d_nav_profile_1790179800993,
+                            fallbackVector = if (selectedTab == NavigationTab.PROFILE) Icons.Default.Person else Icons.Outlined.Person,
+                            contentDescription = "Profile",
+                            isSelected = selectedTab == NavigationTab.PROFILE
                         )
                     },
                     label = { Text("Profile", fontSize = 11.sp) },
@@ -138,16 +155,21 @@ fun MainScreenLayout(
             if (onFabClick != null) {
                 FloatingActionButton(
                     onClick = onFabClick,
-                    containerColor = SunlitClay,
-                    contentColor = Charcoal,
+                    containerColor = Accent,
+                    contentColor = Color.White,
                     shape = CircleShape,
-                    elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 4.dp),
-                    modifier = Modifier.testTag("fab_camera_button")
+                    elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp),
+                    modifier = Modifier
+                        .size(58.dp)
+                        .testTag("fab_camera_button")
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.CameraAlt,
+                    Image(
+                        painter = painterResource(id = R.drawable.img_3d_shutter_fab_1790179812125),
                         contentDescription = "Capture today's moment",
-                        modifier = Modifier.size(26.dp)
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .size(54.dp)
+                            .clip(CircleShape)
                     )
                 }
             }
@@ -164,3 +186,46 @@ fun MainScreenLayout(
         }
     }
 }
+
+@Composable
+private fun Nav3DIcon(
+    drawableRes: Int,
+    fallbackVector: ImageVector,
+    contentDescription: String,
+    isSelected: Boolean
+) {
+    val scale by animateFloatAsState(
+        targetValue = if (isSelected) 1.15f else 0.90f,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "nav_icon_scale"
+    )
+    val alpha by animateFloatAsState(
+        targetValue = if (isSelected) 1f else 0.65f,
+        label = "nav_icon_alpha"
+    )
+
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .size(30.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+                this.alpha = alpha
+            }
+    ) {
+        Image(
+            painter = painterResource(id = drawableRes),
+            contentDescription = contentDescription,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .size(28.dp)
+                .clip(CircleShape)
+                .then(
+                    if (isSelected) Modifier.border(1.5.dp, Accent, CircleShape)
+                    else Modifier
+                )
+        )
+    }
+}
+

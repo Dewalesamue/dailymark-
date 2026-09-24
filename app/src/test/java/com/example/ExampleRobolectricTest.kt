@@ -243,4 +243,13 @@ class ExampleRobolectricTest {
     assertEquals("newuser@gmail.com", result.email)
     assertEquals("New User", result.displayName)
   }
+
+  @Test
+  fun `test main activity launch`() {
+    val controller = org.robolectric.Robolectric.buildActivity(MainActivity::class.java)
+    controller.setup()
+    val activity = controller.get()
+    assertTrue(activity != null)
+  }
 }
+

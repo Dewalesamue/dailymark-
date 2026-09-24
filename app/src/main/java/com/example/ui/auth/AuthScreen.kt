@@ -58,7 +58,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import com.example.ui.components.InteractiveThreeJsCameraView
 import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -72,11 +74,10 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.ui.theme.Accent
 import com.example.ui.theme.AshGrey
 import com.example.ui.theme.Charcoal
 import com.example.ui.theme.Porcelain
-import com.example.ui.theme.SandyClay
-import com.example.ui.theme.SunlitClay
 
 enum class AuthMode {
     SIGN_UP,
@@ -89,6 +90,7 @@ fun AuthScreen(
     onSignInWithEmail: (email: String, password: String, onResult: (Boolean, String?) -> Unit) -> Unit,
     onSignInWithGoogle: (email: String, name: String, onResult: (Boolean, String?) -> Unit) -> Unit,
     onStartGoogleOAuth: (() -> Unit)? = null,
+    onStartGoogleWebOAuth: (() -> Unit)? = null,
     onContinueAsGuest: () -> Unit,
     onBack: (() -> Unit)? = null,
     initialEmail: String = "",
@@ -140,54 +142,19 @@ fun AuthScreen(
                     }
 
                     Spacer(modifier = Modifier.weight(1f))
-
-                    // Supabase Cloud Connected Badge
-                    Surface(
-                        shape = RoundedCornerShape(14.dp),
-                        color = SunlitClay.copy(alpha = 0.25f),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, SunlitClay.copy(alpha = 0.6f))
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(7.dp)
-                                    .clip(CircleShape)
-                                    .background(SunlitClay)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "Supabase Live",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Charcoal
-                            )
-                        }
-                    }
+                    Spacer(modifier = Modifier.width(48.dp))
                 }
             }
 
-            // App Logo & Title
+            // App Logo & Title with Interactive 3D Hero
             item {
-                Spacer(modifier = Modifier.height(16.dp))
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .size(68.dp)
-                        .clip(CircleShape)
-                        .background(SunlitClay)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.CameraAlt,
-                        contentDescription = "Daymark logo",
-                        tint = Charcoal,
-                        modifier = Modifier.size(34.dp)
-                    )
-                }
+                Spacer(modifier = Modifier.height(8.dp))
+                InteractiveThreeJsCameraView(
+                    sizeDp = 124,
+                    showHintBadge = false
+                )
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
                     text = if (mode == AuthMode.SIGN_UP) "Create Your Journal" else "Welcome Back",
@@ -234,7 +201,7 @@ fun AuthScreen(
                                 .weight(1f)
                                 .height(40.dp)
                                 .clip(RoundedCornerShape(22.dp))
-                                .background(if (mode == AuthMode.SIGN_UP) Charcoal else androidx.compose.ui.graphics.Color.Transparent)
+                                .background(if (mode == AuthMode.SIGN_UP) Accent else androidx.compose.ui.graphics.Color.Transparent)
                                 .clickable {
                                     mode = AuthMode.SIGN_UP
                                     errorMessage = null
@@ -245,7 +212,7 @@ fun AuthScreen(
                                 text = "Sign Up",
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = if (mode == AuthMode.SIGN_UP) Porcelain else Charcoal
+                                color = if (mode == AuthMode.SIGN_UP) Color.White else Charcoal
                             )
                         }
 
@@ -256,7 +223,7 @@ fun AuthScreen(
                                 .weight(1f)
                                 .height(40.dp)
                                 .clip(RoundedCornerShape(22.dp))
-                                .background(if (mode == AuthMode.SIGN_IN) Charcoal else androidx.compose.ui.graphics.Color.Transparent)
+                                .background(if (mode == AuthMode.SIGN_IN) Accent else androidx.compose.ui.graphics.Color.Transparent)
                                 .clickable {
                                     mode = AuthMode.SIGN_IN
                                     errorMessage = null
@@ -267,104 +234,84 @@ fun AuthScreen(
                                 text = "Sign In",
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = if (mode == AuthMode.SIGN_IN) Porcelain else Charcoal
+                                color = if (mode == AuthMode.SIGN_IN) Color.White else Charcoal
                             )
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(18.dp))
+                Spacer(modifier = Modifier.height(16.dp))
             }
 
-            // 1-Tap Google / Gmail Sign In Section
+            // 1-Tap Google Sign In Button
             item {
-                Card(
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, AshGrey.copy(alpha = 0.4f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Image(
-                                painter = painterResource(id = R.drawable.ic_google_logo),
-                                contentDescription = "Google",
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Text(
-                                text = "Continue with Google / Gmail",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Use your personal Gmail account to automatically identify your daily journal.",
-                            fontSize = 12.sp,
-                            textAlign = TextAlign.Center,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
-                        )
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        // Google Sign In Button (Uses native Credential Manager or fallback)
-                        OutlinedButton(
-                            onClick = {
-                                if (onStartGoogleOAuth != null) {
-                                    onStartGoogleOAuth()
-                                } else if (emailInput.isNotBlank() && emailInput.contains("@")) {
-                                    val finalName = nameInput.trim().ifEmpty {
-                                        emailInput.substringBefore("@").replace(".", " ")
-                                            .replaceFirstChar { it.uppercase() }
-                                    }
-                                    isLoading = true
-                                    errorMessage = null
-                                    onSignInWithGoogle(emailInput.trim(), finalName) { success, err ->
-                                        isLoading = false
-                                        if (!success) errorMessage = err
-                                    }
-                                } else {
-                                    errorMessage = "Please enter your email address below or use Google Sign-in"
-                                }
-                            },
-                            shape = RoundedCornerShape(24.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.5.dp, Charcoal),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = Charcoal
-                            ),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(48.dp)
-                                .testTag("continue_with_google_button")
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                // Real official Google multi-colored G logo
-                                Image(
-                                    painter = painterResource(id = R.drawable.ic_google_logo),
-                                    contentDescription = "Google Logo",
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Text(
-                                    text = "Continue with Google",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp
-                                )
+                OutlinedButton(
+                    onClick = {
+                        val enteredEmail = emailInput.trim()
+                        if (enteredEmail.isNotBlank() && enteredEmail.contains("@")) {
+                            val finalName = nameInput.trim().ifEmpty {
+                                enteredEmail.substringBefore("@").replace(".", " ")
+                                    .replaceFirstChar { it.uppercase() }
                             }
+                            isLoading = true
+                            errorMessage = null
+                            onSignInWithGoogle(enteredEmail, finalName) { success, err ->
+                                isLoading = false
+                                if (!success) errorMessage = err
+                            }
+                        } else if (onStartGoogleOAuth != null) {
+                            errorMessage = null
+                            onStartGoogleOAuth()
+                        } else {
+                            errorMessage = "Please enter your email or tap Continue with Google"
+                        }
+                    },
+                    shape = RoundedCornerShape(24.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.5.dp, Charcoal),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = Charcoal
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .testTag("continue_with_google_button")
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Image(
+                            painter = painterResource(id = R.drawable.ic_google_logo),
+                            contentDescription = "Google Logo",
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "Continue with Google",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+                    }
+                }
+
+                if (onStartGoogleWebOAuth != null) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        TextButton(
+                            onClick = onStartGoogleWebOAuth,
+                            modifier = Modifier.testTag("open_google_browser_button")
+                        ) {
+                            Text(
+                                text = "Or open Google Web Login →",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.primary,
+                                textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline
+                            )
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(18.dp))
+                Spacer(modifier = Modifier.height(16.dp))
             }
 
             // Divider: OR ENTER YOUR OWN EMAIL
@@ -407,7 +354,7 @@ fun AuthScreen(
                                 Icon(
                                     imageVector = Icons.Default.Person,
                                     contentDescription = null,
-                                    tint = SunlitClay
+                                    tint = Accent
                                 )
                             },
                             singleLine = true,
@@ -420,9 +367,11 @@ fun AuthScreen(
                                 onNext = { focusManager.moveFocus(FocusDirection.Down) }
                             ),
                             colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = Charcoal,
+                                focusedContainerColor = MaterialTheme.colorScheme.surface,
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                                focusedBorderColor = Accent,
                                 unfocusedBorderColor = AshGrey.copy(alpha = 0.5f),
-                                focusedLabelColor = Charcoal
+                                focusedLabelColor = Accent
                             ),
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -443,7 +392,7 @@ fun AuthScreen(
                             Icon(
                                 imageVector = Icons.Default.Email,
                                 contentDescription = null,
-                                tint = SunlitClay
+                                tint = Accent
                             )
                         },
                         singleLine = true,
@@ -456,9 +405,11 @@ fun AuthScreen(
                             onNext = { focusManager.moveFocus(FocusDirection.Down) }
                         ),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Charcoal,
+                            focusedContainerColor = MaterialTheme.colorScheme.surface,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                            focusedBorderColor = Accent,
                             unfocusedBorderColor = AshGrey.copy(alpha = 0.5f),
-                            focusedLabelColor = Charcoal
+                            focusedLabelColor = Accent
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -478,7 +429,7 @@ fun AuthScreen(
                             Icon(
                                 imageVector = Icons.Default.Lock,
                                 contentDescription = null,
-                                tint = SunlitClay
+                                tint = Accent
                             )
                         },
                         trailingIcon = {
@@ -503,9 +454,11 @@ fun AuthScreen(
                             }
                         ),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Charcoal,
+                            focusedContainerColor = MaterialTheme.colorScheme.surface,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                            focusedBorderColor = Accent,
                             unfocusedBorderColor = AshGrey.copy(alpha = 0.5f),
-                            focusedLabelColor = Charcoal
+                            focusedLabelColor = Accent
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -535,7 +488,7 @@ fun AuthScreen(
                 Spacer(modifier = Modifier.height(20.dp))
             }
 
-            // Primary Action Button (Sign Up / Sign In) in Deep Charcoal
+            // Primary Action Button (Sign Up / Sign In) in Accent #DA7756
             item {
                 Button(
                     onClick = {
@@ -570,8 +523,8 @@ fun AuthScreen(
                     },
                     shape = RoundedCornerShape(24.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Charcoal,
-                        contentColor = Porcelain
+                        containerColor = Accent,
+                        contentColor = Color.White
                     ),
                     enabled = !isLoading,
                     modifier = Modifier
@@ -599,39 +552,6 @@ fun AuthScreen(
                 }
 
                 Spacer(modifier = Modifier.height(14.dp))
-            }
-
-            // Info Card: Supabase Cloud Connected Notice
-            item {
-                Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = AshGrey.copy(alpha = 0.15f),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, AshGrey.copy(alpha = 0.3f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.Top
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CheckCircle,
-                            contentDescription = null,
-                            tint = SunlitClay,
-                            modifier = Modifier
-                                .size(18.dp)
-                                .padding(top = 1.dp)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = "Cloud Sync Active: Live Supabase Auth and private cloud storage are connected. Sign in with Google or your email to sync and safeguard your daily memories.",
-                            fontSize = 12.sp,
-                            lineHeight = 17.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.9f)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
             }
 
             // Guest Option

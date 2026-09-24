@@ -69,11 +69,10 @@ import com.example.ui.JournalUiState
 import com.example.ui.components.AvailableMoods
 import com.example.ui.components.MoodChip
 import com.example.ui.components.getMoodEmoji
+import com.example.ui.theme.Accent
 import com.example.ui.theme.AshGrey
 import com.example.ui.theme.Charcoal
 import com.example.ui.theme.Porcelain
-import com.example.ui.theme.SandyClay
-import com.example.ui.theme.SunlitClay
 import com.example.util.DateTimeUtils
 import java.io.File
 import java.time.Instant
@@ -222,7 +221,7 @@ fun MemoriesScreen(
                         }
                     }
 
-                    items(AvailableMoods) { (name, _) ->
+                    items(AvailableMoods, key = { it.first }) { (name, _) ->
                         val isSelected = selectedMoodFilter.equals(name, ignoreCase = true)
                         MoodChip(
                             moodName = name,
@@ -369,7 +368,7 @@ private fun DateBucketCard(
                         Text(
                             text = "$dayLabel • $fullDateString",
                             fontSize = 12.sp,
-                            color = SunlitClay,
+                            color = Accent,
                             fontWeight = FontWeight.SemiBold
                         )
                     } else {
@@ -410,13 +409,13 @@ private fun DateBucketCard(
                     // Photo count badge (showing it holds MANY photos)
                     Surface(
                         shape = RoundedCornerShape(12.dp),
-                        color = SandyClay
+                        color = Accent
                     ) {
                         Text(
                             text = if (photos.size == 1) "1 photo" else "${photos.size} photos",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Charcoal,
+                            color = Color.White,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                         )
                     }

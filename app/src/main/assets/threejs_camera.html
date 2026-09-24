@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>3D Camera</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    body, html {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: transparent;
+      touch-action: none;
+    }
+    #canvas-container {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0;
+      left: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    canvas {
+      display: block;
+      width: 100% !important;
+      height: 100% !important;
+      cursor: grab;
+    }
+    canvas:active {
+      cursor: grabbing;
+    }
+  </style>
+  <script src="three.min.js"></script>
+</head>
+<body>
+  <div id="canvas-container"></div>
+
+  <script>
+    const container = document.getElementById('canvas-container');
+    const width = container.clientWidth || window.innerWidth || 300;
+    const height = container.clientHeight || window.innerHeight || 300;
+
+    // 1. Scene & Transparent Renderer
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 1000);
+    camera.position.set(0, 1.2, 5.2);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(width, height);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.1;
+    container.appendChild(renderer.domElement);
+
+    // 2. Lighting Setup (warm terracotta studio lighting)
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.85);
+    scene.add(ambientLight);
+
+    const keyLight = new THREE.DirectionalLight(0xffecd2, 1.4);
+    keyLight.position.set(4, 5, 4);
+    scene.add(keyLight);
+
+    const fillLight = new THREE.DirectionalLight(0xa6c1ee, 0.6);
+    fillLight.position.set(-4, -2, -3);
+    scene.add(fillLight);
+
+    const rimLight = new THREE.DirectionalLight(0xd97757, 1.0);
+    rimLight.position.set(0, 3, -4);
+    scene.add(rimLight);
+
+    // 3. 3D Camera Model Construction (Clay + Glossy)
+    const cameraGroup = new THREE.Group();
+
+    // Terracotta clay material
+    const terracottaMat = new THREE.MeshStandardMaterial({
+      color: 0xD97757,
+      roughness: 0.35,
+      metalness: 0.05
+    });
+
+    // Charcoal dark material
+    const charcoalMat = new THREE.MeshStandardMaterial({
+      color: 0x242424,
+      roughness: 0.4,
+      metalness: 0.2
+    });
+
+    // Metallic chrome / bronze material
+    const bronzeMat = new THREE.MeshStandardMaterial({
+      color: 0xE8A87C,
+      roughness: 0.2,
+      metalness: 0.8
+    });
+
+    // Glass optic lens material
+    const glassMat = new THREE.MeshPhysicalMaterial({
+      color: 0x111e2e,
+      roughness: 0.1,
+      metalness: 0.9,
+      clearcoat: 1.0,
+      clearcoatRoughness: 0.1
+    });
+
+    // Body Base (Rounded Box)
+    const bodyGeo = new THREE.BoxGeometry(2.3, 1.5, 0.9, 4, 4, 4);
+    const bodyMesh = new THREE.Mesh(bodyGeo, terracottaMat);
+    cameraGroup.add(bodyMesh);
+
+    // Top Cap Accent (Dark Charcoal accent bar)
+    const topBarGeo = new THREE.BoxGeometry(2.32, 0.28, 0.92);
+    const topBarMesh = new THREE.Mesh(topBarGeo, charcoalMat);
+    topBarMesh.position.y = 0.65;
+    cameraGroup.add(topBarMesh);
+
+    // Lens Barrel Outer Ring (Bronze / Gold metallic)
+    const lensRingGeo = new THREE.CylinderGeometry(0.72, 0.72, 0.3, 32);
+    const lensRingMesh = new THREE.Mesh(lensRingGeo, bronzeMat);
+    lensRingMesh.rotation.x = Math.PI / 2;
+    lensRingMesh.position.set(0, 0, 0.55);
+    cameraGroup.add(lensRingMesh);
+
+    // Inner Lens Cylinder (Charcoal)
+    const lensInnerGeo = new THREE.CylinderGeometry(0.58, 0.58, 0.38, 32);
+    const lensInnerMesh = new THREE.Mesh(lensInnerGeo, charcoalMat);
+    lensInnerMesh.rotation.x = Math.PI / 2;
+    lensInnerMesh.position.set(0, 0, 0.62);
+    cameraGroup.add(lensInnerMesh);
+
+    // Glass Lens Element (Deep glossy reflection)
+    const glassGeo = new THREE.SphereGeometry(0.48, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+    const glassMesh = new THREE.Mesh(glassGeo, glassMat);
+    glassMesh.rotation.x = Math.PI / 2;
+    glassMesh.position.set(0, 0, 0.72);
+    cameraGroup.add(glassMesh);
+
+    // Shutter Button (Top Left)
+    const shutterGeo = new THREE.CylinderGeometry(0.18, 0.18, 0.16, 24);
+    const shutterMesh = new THREE.Mesh(shutterGeo, bronzeMat);
+    shutterMesh.position.set(0.68, 0.86, 0);
+    cameraGroup.add(shutterMesh);
+
+    // Viewfinder / Flash Sensor (Top Right)
+    const flashGeo = new THREE.BoxGeometry(0.3, 0.2, 0.1);
+    const flashMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      roughness: 0.1,
+      metalness: 0.9,
+      emissive: 0xffecd2,
+      emissiveIntensity: 0.2
+    });
+    const flashMesh = new THREE.Mesh(flashGeo, flashMat);
+    flashMesh.position.set(-0.68, 0.65, 0.45);
+    cameraGroup.add(flashMesh);
+
+    // Red Recording / Lens dot accent
+    const dotGeo = new THREE.SphereGeometry(0.06, 16, 16);
+    const dotMat = new THREE.MeshBasicMaterial({ color: 0xff4d4d });
+    const dotMesh = new THREE.Mesh(dotGeo, dotMat);
+    dotMesh.position.set(0.75, 0.35, 0.46);
+    cameraGroup.add(dotMesh);
+
+    // Initial slight isometric tilt
+    cameraGroup.rotation.x = 0.25;
+    cameraGroup.rotation.y = -0.45;
+    scene.add(cameraGroup);
+
+    // 4. Smooth Touch / Drag Interaction
+    let isDragging = false;
+    let previousTouchX = 0;
+    let previousTouchY = 0;
+    let targetRotationX = 0.25;
+    let targetRotationY = -0.45;
+    let idleTimer = 0;
+
+    function onPointerDown(e) {
+      isDragging = true;
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      previousTouchX = clientX;
+      previousTouchY = clientY;
+    }
+
+    function onPointerMove(e) {
+      if (!isDragging) return;
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      const deltaX = clientX - previousTouchX;
+      const deltaY = clientY - previousTouchY;
+
+      targetRotationY += deltaX * 0.012;
+      targetRotationX += deltaY * 0.012;
+
+      // Clamp vertical tilt to prevent unnatural inversion
+      targetRotationX = Math.max(-0.6, Math.min(0.8, targetRotationX));
+
+      previousTouchX = clientX;
+      previousTouchY = clientY;
+      idleTimer = 0;
+    }
+
+    function onPointerUp() {
+      isDragging = false;
+    }
+
+    window.addEventListener('mousedown', onPointerDown);
+    window.addEventListener('mousemove', onPointerMove);
+    window.addEventListener('mouseup', onPointerUp);
+
+    window.addEventListener('touchstart', onPointerDown, { passive: true });
+    window.addEventListener('touchmove', onPointerMove, { passive: true });
+    window.addEventListener('touchend', onPointerUp, { passive: true });
+
+    // Handle Resize
+    window.addEventListener('resize', () => {
+      const w = container.clientWidth || window.innerWidth;
+      const h = container.clientHeight || window.innerHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    });
+
+    // 5. Render Loop with Inertia & Floating Turntable
+    let clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const delta = clock.getDelta();
+
+      if (!isDragging) {
+        idleTimer += delta;
+        // Subtle floating bob
+        cameraGroup.position.y = Math.sin(clock.getElapsedTime() * 1.5) * 0.08;
+        // Slow ambient turntable rotation when idle
+        if (idleTimer > 1.2) {
+          targetRotationY += 0.006;
+        }
+      }
+
+      // Smooth damping / interpolation towards target rotation
+      cameraGroup.rotation.y += (targetRotationY - cameraGroup.rotation.y) * 0.12;
+      cameraGroup.rotation.x += (targetRotationX - cameraGroup.rotation.x) * 0.12;
+
+      renderer.render(scene, camera);
+    }
+
+    animate();
+  </script>
+</body>
+</html>

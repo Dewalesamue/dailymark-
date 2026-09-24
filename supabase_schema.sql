@@ -6,12 +6,17 @@
 -- 1. Create PROFILES Table (Scoped to auth.uid())
 CREATE TABLE IF NOT EXISTS public.profiles (
     id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    display_name TEXT,
     name TEXT,
     email TEXT,
     avatar_url TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Ensure both column variants exist if the table was created previously
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS display_name TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS name TEXT;
 
 -- 2. Create DAYS Table
 CREATE TABLE IF NOT EXISTS public.days (
@@ -76,28 +81,44 @@ CREATE POLICY "Users can manage own photos"
 -- 8. Auto-create user's profile row on first sign-in via Postgres trigger on auth.users insert
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
+DECLARE
+    user_display_name TEXT;
+    user_avatar TEXT;
 BEGIN
-    INSERT INTO public.profiles (id, name, email, avatar_url, created_at)
+    user_display_name := COALESCE(
+        NEW.raw_user_meta_data->>'full_name',
+        NEW.raw_user_meta_data->>'name',
+        NEW.raw_user_meta_data->>'display_name',
+        split_part(NEW.email, '@', 1)
+    );
+    user_avatar := COALESCE(
+        NEW.raw_user_meta_data->>'avatar_url',
+        NEW.raw_user_meta_data->>'picture',
+        ''
+    );
+
+    -- Insert into public.profiles setting both display_name and name
+    INSERT INTO public.profiles (id, display_name, name, email, avatar_url, created_at, updated_at)
     VALUES (
         NEW.id,
-        COALESCE(
-            NEW.raw_user_meta_data->>'full_name',
-            NEW.raw_user_meta_data->>'name',
-            split_part(NEW.email, '@', 1)
-        ),
+        user_display_name,
+        user_display_name,
         NEW.email,
-        COALESCE(
-            NEW.raw_user_meta_data->>'avatar_url',
-            NEW.raw_user_meta_data->>'picture',
-            ''
-        ),
+        user_avatar,
+        NOW(),
         NOW()
     )
     ON CONFLICT (id) DO UPDATE SET
+        display_name = COALESCE(EXCLUDED.display_name, public.profiles.display_name),
         name = COALESCE(EXCLUDED.name, public.profiles.name),
         email = COALESCE(EXCLUDED.email, public.profiles.email),
         avatar_url = COALESCE(EXCLUDED.avatar_url, public.profiles.avatar_url),
         updated_at = NOW();
+
+    RETURN NEW;
+EXCEPTION WHEN OTHERS THEN
+    -- CRITICAL: Catch any unexpected database error so it NEVER breaks Supabase auth signup!
+    RAISE WARNING 'handle_new_user failed for user %: %', NEW.id, SQLERRM;
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

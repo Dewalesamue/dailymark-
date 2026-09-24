@@ -37,10 +37,12 @@ object CredentialManagerHelper {
     ): Result<GoogleSignInResult> {
         return try {
             val credentialManager = CredentialManager.create(context)
-            val clientId = serverClientId ?: try {
+            val clientId = (serverClientId?.takeIf { it.isNotBlank() } ?: try {
                 context.getString(R.string.default_web_client_id)
             } catch (e: Exception) {
                 ""
+            }).ifBlank {
+                com.example.data.supabase.SupabaseConfig.GOOGLE_WEB_CLIENT_ID
             }
 
             if (clientId.isBlank()) {

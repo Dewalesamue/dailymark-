@@ -5,6 +5,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -54,16 +55,20 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.R
 
 data class OnboardingStep(
     val title: String,
     val subtitle: String,
     val icon: ImageVector,
+    val drawableRes: Int? = null,
     val badge: String
 )
 
@@ -72,19 +77,22 @@ private val steps = listOf(
         title = "One photo,\nevery day.",
         subtitle = "Capture a meaningful moment each day to create a visual journal of your journey.",
         icon = Icons.Default.CameraAlt,
+        drawableRes = R.drawable.img_3d_camera_1790178903986,
         badge = "DAILY CAPTURE"
     ),
     OnboardingStep(
         title = "Watch your life\nunfold.",
         subtitle = "Your marks form an elegant visual calendar. Revisit any day, month, or season with a single glance.",
         icon = Icons.Default.CalendarMonth,
+        drawableRes = R.drawable.img_3d_calendar_1790178917428,
         badge = "VISUAL CALENDAR"
     ),
     OnboardingStep(
         title = "Your Personal\nVisual Journal.",
         subtitle = "Sign in with your own Gmail or email to keep your memories organized and backed up. Simple, private, and effortless.",
         icon = Icons.Default.NotificationsActive,
-        badge = "DEMO AUTH"
+        drawableRes = R.drawable.img_3d_journal_cloud_1790178929798,
+        badge = "PRIVATE & BACKED UP"
     )
 )
 
@@ -161,16 +169,27 @@ fun OnboardingScreen(
                     Box(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier
-                            .size(130.dp)
+                            .size(136.dp)
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.surfaceVariant)
                     ) {
-                        Icon(
-                            imageVector = current.icon,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(60.dp)
-                        )
+                        if (current.drawableRes != null) {
+                            Image(
+                                painter = painterResource(id = current.drawableRes),
+                                contentDescription = current.title,
+                                modifier = Modifier
+                                    .size(136.dp)
+                                    .clip(CircleShape),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            Icon(
+                                imageVector = current.icon,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(60.dp)
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(36.dp))

@@ -32,11 +32,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.ui.theme.Accent
 import com.example.ui.theme.AshGrey
 import com.example.ui.theme.Charcoal
 import com.example.ui.theme.Porcelain
-import com.example.ui.theme.SandyClay
-import com.example.ui.theme.SunlitClay
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -81,15 +80,15 @@ fun MoodChip(
     val emoji = getMoodEmoji(moodName)
 
     val bgColor = if (isSelected) {
-        SunlitClay
+        Accent
     } else {
         AshGrey.copy(alpha = 0.2f)
     }
 
-    val contentColor = Charcoal
+    val contentColor = if (isSelected) androidx.compose.ui.graphics.Color.White else Charcoal
 
     val borderColor = if (isSelected) {
-        Charcoal
+        Accent
     } else {
         AshGrey.copy(alpha = 0.4f)
     }

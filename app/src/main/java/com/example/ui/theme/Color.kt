@@ -3,7 +3,7 @@ package com.example.ui.theme
 import androidx.compose.ui.graphics.Color
 
 // =========================================================================
-// DESIGN SYSTEM — COLOR TOKENS (Daymark v2.0)
+// DESIGN SYSTEM — COLOR TOKENS (Daymark Single Accent Revision)
 // =========================================================================
 
 // 1. Charcoal: Dark mode background & dark surfaces (#4A4A4A)
@@ -19,7 +19,7 @@ val PorcelainSurface = Color(0xFFFFFFFF)       // Crisp white surface for cards 
 val PorcelainVariant = Color(0xFFF2EFE7)       // Muted surface / chip / search bar container
 val PorcelainBorder = Color(0xFFE5DFC9)        // Subtle warm border on Porcelain
 
-// 3. Ash Grey: (Confirmed value: #A4B5A6)
+// 3. Ash Grey: (#A4B5A6)
 // Sage-tinted ash grey for secondary text, dividers, and muted surfaces
 val AshGrey = Color(0xFFA4B5A6)                // Core Ash Grey swatch from the design palette (#A4B5A6)
 val AshGreyDivider = Color(0xFFA4B5A6)         // Divider line & border token
@@ -27,37 +27,45 @@ val AshGreyMuted = Color(0xFFE8EDE9)           // Light mode muted container tin
 val AshGreyDarkMuted = Color(0xFF3D4740)       // Dark mode muted container tint
 
 // Secondary text tokens derived from Ash Grey for WCAG AA contrast compliance:
-// On Porcelain (#FAF8F2), #5A6B5E achieves > 5.2:1 contrast ratio.
-val AshGreyTextLight = Color(0xFF5A6B5E)       // Light mode secondary text (passes WCAG AA)
-// On Charcoal (#4A4A4A), #D0DCD2 achieves > 7.1:1 contrast ratio.
-val AshGreyTextDark = Color(0xFFD0DCD2)        // Dark mode secondary text (passes WCAG AA)
+val AshGreyTextLight = Color(0xFF5A6B5E)       // Light mode secondary text (passes WCAG AA on Porcelain)
+val AshGreyTextDark = Color(0xFFD0DCD2)        // Dark mode secondary text (passes WCAG AA on Charcoal)
 
-// 4. Sunlit Clay: Primary accent (buttons, active nav icon, FAB) (#E2B56A)
-val SunlitClay = Color(0xFFE2B56A)             // Primary accent
-val SunlitClayDark = Color(0xFFC79848)         // Pressed / focused accent
-val SunlitClayLight = Color(0xFFECCB8A)        // Lighter accent
-val SunlitClayContainer = Color(0xFFFBF4E4)    // Light mode primary container tint
-val SunlitClayDarkContainer = Color(0xFF6B5125) // Dark mode primary container tint
-val OnSunlitClay = Color(0xFF261D0C)           // Crisp high-contrast deep text/icon on Sunlit Clay
+// 4. Accent: Single Accent across whole app (#DA7756 - warm terracotta/clay orange)
+// Used for: primary buttons, active nav icon, the camera FAB, toggles in the "on" state,
+// and any highlight/badge color.
+val Accent = Color(0xFFDA7756)                 // Core single accent (#DA7756)
+val AccentTerracotta = Accent                  // Semantic alias
+val AccentDark = Color(0xFFBF6142)             // Pressed / focused accent
+val AccentLight = Color(0xFFE48E72)            // Soft accent highlight
+val AccentContainer = Color(0xFFFBECE6)        // Light mode accent container tint
+val AccentDarkContainer = Color(0xFF4E2316)    // Dark mode accent container tint
+val OnAccent = Color(0xFFFFFFFF)               // Crisp white text/icon on Accent (#DA7756)
 
-// 5. Sandy Clay: Secondary accent (highlights, badges, hover states) (#E7B08A)
-val SandyClay = Color(0xFFE7B08A)              // Secondary accent
-val SandyClayLight = Color(0xFFF2CDB2)         // Soft highlight state
-val SandyClayContainer = Color(0xFFFCF2EC)    // Light mode secondary badge container
-val SandyClayDarkContainer = Color(0xFF664129) // Dark mode secondary badge container
-val OnSandyClay = Color(0xFF3B1E0C)            // High-contrast text on Sandy Clay
+// Every place that previously referenced Sunlit Clay or Sandy Clay now uses #DA7756 instead — no second accent color:
+val SunlitClay = Accent
+val SunlitClayDark = AccentDark
+val SunlitClayLight = AccentLight
+val SunlitClayContainer = AccentContainer
+val SunlitClayDarkContainer = AccentDarkContainer
+val OnSunlitClay = OnAccent
 
-// 6. Neutral Text
+val SandyClay = Accent
+val SandyClayLight = AccentLight
+val SandyClayContainer = AccentContainer
+val SandyClayDarkContainer = AccentDarkContainer
+val OnSandyClay = OnAccent
+
+// 5. Neutral Text
 val TextCharcoalPrimary = Color(0xFF1E1E1E)    // Crisp deep charcoal text for light mode
 val TextPorcelainPrimary = Color(0xFFFAF8F2)   // Crisp porcelain text for dark mode
 
 // =========================================================================
 // Backward-Compatibility Aliases
 // =========================================================================
-val WarmTerracotta = SunlitClay
-val WarmTerracottaDark = SunlitClayDark
-val WarmTerracottaLight = SunlitClayLight
-val WarmTerracottaContainer = SunlitClayContainer
+val WarmTerracotta = Accent
+val WarmTerracottaDark = AccentDark
+val WarmTerracottaLight = AccentLight
+val WarmTerracottaContainer = AccentContainer
 val DeepCharcoal = Charcoal
 val DeepCharcoalPressed = CharcoalDark
 val DeepCharcoalSurface = CharcoalSurface
@@ -75,8 +83,8 @@ val DarkElevatedSurface = CharcoalElevated
 val DarkAlmondCard = CharcoalElevated
 val DarkBorder = CharcoalBorder
 val DarkPillBackground = CharcoalElevated
-val DarkTerracotta = SunlitClay
-val DarkTerracottaContainer = SunlitClayDarkContainer
+val DarkTerracotta = Accent
+val DarkTerracottaContainer = AccentDarkContainer
 val TextLinenWhitePrimary = TextPorcelainPrimary
 val TextSandSecondary = AshGreyTextDark
 
